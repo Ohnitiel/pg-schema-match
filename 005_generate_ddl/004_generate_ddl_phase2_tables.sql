@@ -2,6 +2,7 @@ CREATE OR REPLACE FUNCTION generate_ddl_phase2_tables()
 RETURNS VOID
 AS $FUNC$
 BEGIN
+  RAISE NOTICE 'Generating DDL for phase 2 (tables)...';
   -- Create new tables (columns added next)
   INSERT INTO migration_ddl (
     phase, seq, object_type, ddl_operation
@@ -44,8 +45,8 @@ BEGIN
     , tc.name
     , tc.type
     , CASE WHEN NOT tc.nullable THEN ' NOT NULL' ELSE '' END
-    , CASE WHEN tc.default_value IS NOT NULL
-        THEN ' DEFAULT ' || tc.default_value
+    , CASE WHEN tc."default" IS NOT NULL
+        THEN ' DEFAULT ' || tc."default"
         ELSE ''
       END
     )
@@ -81,8 +82,8 @@ BEGIN
         THEN FORMAT(', ALTER COLUMN %I SET NOT NULL', cd.name)
         ELSE FORMAT(', ALTER COLUMN %I DROP NOT NULL', cd.name)
       END
-    , CASE WHEN cd.default_value IS NOT NULL
-        THEN FORMAT(', ALTER COLUMN %I SET DEFAULT %s', cd.name, cd.default_value)
+    , CASE WHEN cd."default" IS NOT NULL
+        THEN FORMAT(', ALTER COLUMN %I SET DEFAULT %s', cd.name, cd."default")
         ELSE FORMAT(', ALTER COLUMN %I DROP DEFAULT', cd.name)
       END
     )
@@ -119,8 +120,8 @@ BEGIN
     , cd.name
     , cd.type
     , CASE WHEN NOT cd.nullable THEN ' NOT NULL' ELSE '' END
-    , CASE WHEN cd.default_value IS NOT NULL
-        THEN ' DEFAULT ' || cd.default_value
+    , CASE WHEN cd."default" IS NOT NULL
+        THEN ' DEFAULT ' || cd."default"
         ELSE ''
       END
     )

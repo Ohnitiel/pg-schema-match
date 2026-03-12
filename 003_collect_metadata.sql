@@ -3,6 +3,7 @@ RETURNS VOID
 AS $FUNC$
 BEGIN
 
+  RAISE NOTICE 'Collecting TARGET tables...';
   INSERT INTO target_tables (oid, schema_name, name, relkind)
   SELECT
     c.oid, n.nspname, c.relname, c.relkind
@@ -12,6 +13,7 @@ BEGIN
   WHERE n.nspname NOT IN ('pg_toast', 'pg_catalog', 'information_schema')
   AND c.relkind IN ('r', 'm');
 
+  RAISE NOTICE 'Collecting TARGET columns...';
   INSERT INTO target_columns (
     table_oid, schema_name, table_name, name, nullable
   , type, length, "default"
@@ -36,6 +38,7 @@ BEGIN
     AND c.relkind = 'r'
     AND NOT a.attisdropped;
 
+  RAISE NOTICE 'Collecting TARGET constraints...';
   INSERT INTO target_constraints (
     oid, name, type, table_oid, ref_table_oid, cols
   , ref_cols, expression, on_delete, on_update
@@ -50,6 +53,7 @@ BEGIN
     ON con.oid = def.object_oid
   WHERE n.nspname NOT IN ('pg_toast', 'pg_catalog' , 'information_schema');
 
+  RAISE NOTICE 'Collecting TARGET indexes...';
   INSERT INTO target_indexes (
     oid, table_oid, name, expression
   )
@@ -62,6 +66,7 @@ BEGIN
     ON i.indexrelid = def.object_oid
   WHERE n.nspname NOT IN ('pg_toast', 'pg_catalog' , 'information_schema');
 
+  RAISE NOTICE 'Collecting TARGET sequences...';
   INSERT INTO target_sequences (
     oid, schema_name, name, type, start, min, max, increment, cycles
   )
@@ -77,6 +82,7 @@ BEGIN
     ON s.seqtypid = t.oid
   WHERE n.nspname NOT IN ('pg_toast', 'pg_catalog' , 'information_schema');
 
+  RAISE NOTICE 'Collecting TARGET views...';
   INSERT INTO target_views (
     oid, schema_name, name, expression, is_materialized
   )
@@ -90,6 +96,7 @@ BEGIN
   WHERE n.nspname NOT IN ('pg_toast', 'pg_catalog' , 'information_schema')
   AND c.relkind IN ('v', 'm');
 
+  RAISE NOTICE 'Collecting CURRENT tables...';
   INSERT INTO current_tables (oid, schema_name, name, relkind)
   SELECT 
     c.oid, n.nspname, c.relname, c.relkind
@@ -98,6 +105,7 @@ BEGIN
   WHERE n.nspname NOT IN ('pg_toast', 'pg_catalog', 'information_schema')
   AND c.relkind IN ('r', 'm');
 
+  RAISE NOTICE 'Collecting CURRENT columns...';
   INSERT INTO current_columns (
     table_oid, schema_name, table_name, name, nullable
   , type, length, "default"
@@ -115,6 +123,7 @@ BEGIN
     AND a.attnum > 0 
     AND NOT a.attisdropped;
 
+  RAISE NOTICE 'Collecting CURRENT constraints...';
   INSERT INTO current_constraints (
     oid, name, type, table_oid, ref_table_oid, cols
   , ref_cols, expression, on_delete, on_update
@@ -128,6 +137,7 @@ BEGIN
   JOIN pg_namespace n ON con.connamespace = n.oid
   WHERE n.nspname NOT IN ('pg_toast', 'pg_catalog', 'information_schema');
 
+  RAISE NOTICE 'Collecting CURRENT indexes...';
   INSERT INTO current_indexes (
     oid, table_oid, name, expression
   )
@@ -139,6 +149,7 @@ BEGIN
   JOIN pg_namespace n ON c.relnamespace = n.oid
   WHERE n.nspname NOT IN ('pg_toast', 'pg_catalog', 'information_schema');
 
+  RAISE NOTICE 'Collecting CURRENT sequences...';
   INSERT INTO current_sequences (
     oid, schema_name, name, type, start, min, max, increment, cycles
   )
@@ -150,6 +161,7 @@ BEGIN
   JOIN pg_namespace n ON c.relnamespace = n.oid
   JOIN pg_type t ON s.seqtypid = t.oid;
 
+  RAISE NOTICE 'Collecting CURRENT views...';
   INSERT INTO current_views (
     oid, schema_name, name, expression, is_materialized
   )
@@ -161,4 +173,6 @@ BEGIN
   JOIN pg_namespace n ON c.relnamespace = n.oid
   WHERE n.nspname NOT IN ('pg_toast', 'pg_catalog', 'information_schema')
     AND c.relkind IN ('v', 'm');
+
+  RAISE NOTICE 'Metadata collection complete.';
 END $FUNC$ LANGUAGE PLPGSQL;

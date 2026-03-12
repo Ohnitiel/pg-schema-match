@@ -16,12 +16,15 @@ DECLARE
   );
 BEGIN
 
+  RAISE NOTICE 'Starting Postgres FDW configuration...';
   CREATE EXTENSION IF NOT EXISTS postgres_fdw;
   CREATE SCHEMA IF NOT EXISTS model_schema;
 
+  RAISE NOTICE 'Creating SERVER and USER MAPPING for model_db...';
   EXECUTE v_create_server_ddl;
   EXECUTE v_create_user_mapping_ddl;
 
+  RAISE NOTICE 'Importing foreign schemas (pg_catalog and migrations)...';
   IMPORT FOREIGN SCHEMA pg_catalog
     LIMIT TO (
       pg_class, pg_namespace, pg_constraint
@@ -35,7 +38,7 @@ BEGIN
     FROM SERVER model_db
     INTO model_schema;
 
-  RAISE INFO 'Configurado Postgres FDW! Server: model_db';
+  RAISE NOTICE 'Postgres FDW configured successfully! Server: model_db';
 
 END $FUNC$ LANGUAGE PLPGSQL;
 

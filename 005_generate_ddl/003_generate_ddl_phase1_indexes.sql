@@ -2,6 +2,7 @@ CREATE OR REPLACE FUNCTION generate_ddl_phase1_indexes()
 RETURNS VOID
 AS $FUNC$
 BEGIN
+  RAISE NOTICE 'Generating DDL for phase 1 (indexes)...';
   -- Drop indexes on tables with altered columns
   -- (index may reference the column being changed)
   INSERT INTO migration_ddl (

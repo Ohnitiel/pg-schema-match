@@ -2,6 +2,7 @@ CREATE OR REPLACE FUNCTION generate_ddl_phase1_views()
 RETURNS VOID
 AS $FUNC$
 BEGIN
+  RAISE NOTICE 'Generating DDL for phase 1 (views)...';
   INSERT INTO migration_ddl (
     phase, seq, object_type, ddl_operation
   , schema_name, object_name

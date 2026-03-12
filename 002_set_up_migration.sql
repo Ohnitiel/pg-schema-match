@@ -2,6 +2,7 @@ CREATE OR REPLACE FUNCTION set_up_migration()
 RETURNS VOID
 AS $FUNC$
 BEGIN
+  RAISE NOTICE 'Setting up migration staging tables...';
 
   CREATE TABLE migration_phases (
     phase INT PRIMARY KEY
@@ -160,5 +161,6 @@ BEGIN
   , is_materialized BOOL NOT NULL DEFAULT FALSE
   );
 
+  RAISE NOTICE 'Migration staging tables created successfully.';
 END $FUNC$ LANGUAGE PLPGSQL;
 

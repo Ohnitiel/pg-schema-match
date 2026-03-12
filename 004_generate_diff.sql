@@ -3,6 +3,7 @@ RETURNS VOID
 AS $FUNC$
 BEGIN
 
+  RAISE NOTICE 'Identifying new tables...';
   CREATE TABLE new_tables AS
   SELECT
     tt.schema_name, tt.name
@@ -13,6 +14,7 @@ BEGIN
   WHERE ct.oid IS NULL
   AND ct.relkind = 'r';
 
+  RAISE NOTICE 'Identifying column differences...';
   CREATE TABLE columns_diff AS
   SELECT
     tc.schema_name
@@ -39,6 +41,7 @@ BEGIN
     OR COALESCE(tc.length, -1) <> COALESCE(cc.length, -1)
     OR COALESCE(tc.default, '-1') <> COALESCE(cc.default, '-1');
 
+  RAISE NOTICE 'Identifying constraint differences...';
   CREATE TABLE constraints_diff AS
   SELECT
     tc.oid
@@ -50,38 +53,34 @@ BEGIN
   , cc.oid IS NULL
       AND tc.expression <> cc.expression AS is_changed
   FROM target_constraints tc
+  JOIN target_tables tt
+    ON tc.table_oid = tt.oid
+  JOIN current_tables ct
+    ON tt.schema_name = ct.schema_name
+    AND tt.name = ct.name
   LEFT JOIN current_constraints cc
-    ON tc.table_oid IN (
-      SELECT tt.oid
-      FROM target_tables tt
-      JOIN current_tables ct
-        ON tt.schema_name = ct.schema_name
-        AND tt.name = ct.name
-      WHERE ct.oid = cc.table_oid
-    );
+    ON ct.oid = cc.table_oid;
 
+  RAISE NOTICE 'Identifying index differences...';
   CREATE TABLE indexes_diff AS
   SELECT
-    tc.oid
-  , tc.table_oid
-  , tc.name
-  , tc.type
-  , tc.expression
-  , cc.oid IS NULL AS is_new
-  , cc.oid IS NULL
-      AND tc.expression <> cc.expression AS is_changed
-  FROM target_indexes tc
-  LEFT JOIN current_indexes cc
-    ON tc.schema_name = cc.schema_name
-    AND tc.table_oid IN (
-      SELECT tt.oid
-      FROM target_tables tt
-      JOIN current_tables ct
-        ON tt.schema_name = ct.schema_name
-        AND tt.name = ct.name
-      WHERE ct.oid = cc.table_oid
-    );
+    ti.oid
+  , ti.table_oid
+  , ti.name
+  , ti.expression
+  , ci.oid IS NULL AS is_new
+  , ci.oid IS NULL
+      AND ti.expression <> ci.expression AS is_changed
+  FROM target_indexes ti
+  JOIN target_tables tt
+    ON ti.table_oid = tt.oid
+  JOIN current_tables ct
+    ON tt.schema_name = ct.schema_name
+    AND tt.name = ct.name
+  LEFT JOIN current_indexes ci
+    ON ci.oid = ci.table_oid;
 
+  RAISE NOTICE 'Identifying sequence differences...';
   CREATE TABLE sequences_diff AS
   SELECT
     ts.oid
@@ -112,6 +111,7 @@ BEGIN
     OR ts.cycles <> cs.cycles
     OR ts.type <> cs.type;
 
+  RAISE NOTICE 'Identifying view differences...';
   CREATE TABLE views_diff AS
   SELECT
     tv.oid
@@ -129,6 +129,7 @@ BEGIN
   WHERE cv.oid IS NULL
     OR tv.expression <> cv.expression;
 
+  RAISE NOTICE 'Identifying dropped tables...';
   CREATE TABLE dropped_tables AS
   SELECT ct.oid, ct.schema_name, ct.name
   FROM current_tables ct
@@ -137,6 +138,7 @@ BEGIN
     AND ct.name = tt.name
   WHERE tt.oid IS NULL;
 
+  RAISE NOTICE 'Identifying dropped columns...';
   CREATE TABLE dropped_columns AS
   SELECT cc.schema_name, cc.table_name, cc.name
   FROM current_columns cc
@@ -153,6 +155,7 @@ BEGIN
       WHERE dt.schema_name = cc.schema_name
     );
 
+  RAISE NOTICE 'Identifying dropped constraints...';
   CREATE TABLE dropped_constraints AS
   SELECT cc.oid, cc.name, cc.type, cc.table_oid, cc.expression
   FROM current_constraints cc
@@ -161,6 +164,7 @@ BEGIN
   WHERE tc.oid IS NULL
     AND cc.table_oid NOT IN (SELECT oid FROM dropped_tables);
 
+  RAISE NOTICE 'Identifying dropped indexes...';
   CREATE TABLE dropped_indexes AS
   SELECT ci.oid, ci.name, ci.table_oid, ci.expression
   FROM current_indexes ci
@@ -169,4 +173,5 @@ BEGIN
   WHERE ti.oid IS NULL
     AND ci.table_oid NOT IN (SELECT oid FROM dropped_tables);
 
+  RAISE NOTICE 'Diff generation complete.';
 END $FUNC$ LANGUAGE PLPGSQL;
