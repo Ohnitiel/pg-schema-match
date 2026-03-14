@@ -1,33 +1,9 @@
 CREATE OR REPLACE PROCEDURE _migrations.generate_ddl_phase2_tables()
 AS $FUNC$
 DECLARE
-  v_max_phase_seq INT;
+  v_max_phase_seq INT := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 2);
 BEGIN
   RAISE NOTICE 'Generating DDL for phase 2 (tables)...';
-  -- Create new schemas
-  WITH new_schemas AS (
-    SELECT DISTINCT schema_name
-    FROM _migrations.new_tables
-  )
-  INSERT INTO _migrations.migration_ddl (
-    phase, seq, object_type, ddl_operation
-  , schema_name, object_name
-  , ddl, is_temporary_drop
-  )
-  SELECT
-  2
-  , ROW_NUMBER() OVER (ORDER BY schema_name)
-  , 'SCHEMA'
-  , 'CREATE'
-  , schema_name
-  , schema_name
-  , FORMAT(
-      'CREATE SCHEMA IF NOT EXISTS %I;'
-    , schema_name
-    )
-  , FALSE
-  FROM new_schemas;
-
   v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 2);
   -- Create new tables (columns added next)
   INSERT INTO _migrations.migration_ddl (

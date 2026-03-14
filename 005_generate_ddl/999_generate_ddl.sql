@@ -9,7 +9,6 @@ BEGIN
     3 - Finalization: Recreate views, FK, indexes
   */
 
-  DROP TABLE IF EXISTS _migrations.migration_ddl;
   CREATE TABLE _migrations.migration_ddl (
     id SERIAL PRIMARY KEY
   , phase INT NOT NULL

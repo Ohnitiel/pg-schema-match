@@ -167,7 +167,7 @@ BEGIN
   )
   SELECT 
     c.oid, n.nspname, c.relname
-  , pg_get_viewdef(c.oid)
+  , pg_get_viewdef(c.oid, true)
   , c.relkind = 'm'
   FROM pg_class c
   JOIN pg_namespace n ON c.relnamespace = n.oid
