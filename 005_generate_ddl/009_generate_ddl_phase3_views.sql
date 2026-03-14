@@ -1,11 +1,12 @@
-CREATE OR REPLACE FUNCTION generate_ddl_phase3_views()
-RETURNS VOID
+CREATE OR REPLACE PROCEDURE _migrations.generate_ddl_phase3_views()
 AS $FUNC$
+DECLARE
+  v_max_phase_seq INT := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 3);
 BEGIN
   RAISE NOTICE 'Generating DDL for phase 3 (views)...';
   -- Recreate managed views from target definition
   -- ordered by depth ASC so base views are created before dependent ones
-  INSERT INTO migration_ddl (
+  INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
   , schema_name, object_name
   , ddl, is_temporary_drop
@@ -20,8 +21,8 @@ BEGIN
     , 1           AS depth
     , ARRAY[tv.oid] AS path
     , FALSE         AS cycle
-    FROM migration_ddl md
-    JOIN target_views tv
+    FROM _migrations.migration_ddl md
+    JOIN _migrations.target_views tv
       ON tv.name        = md.object_name
       AND tv.schema_name = md.schema_name
     WHERE md.phase         = 1
@@ -50,7 +51,7 @@ BEGIN
       AND c.oid      <> vd.oid
     JOIN pg_namespace n
       ON n.oid        = c.relnamespace
-    JOIN target_views tv2
+    JOIN _migrations.target_views tv2
       ON tv2.name        = c.relname
       AND tv2.schema_name = n.nspname
     WHERE c.relkind IN ('v', 'm')
@@ -69,7 +70,8 @@ BEGIN
   )
   SELECT
     3
-  , ROW_NUMBER() OVER (ORDER BY depth ASC, tv.oid)
+  , v_max_phase_seq 
+    + ROW_NUMBER() OVER (ORDER BY depth ASC, tv.oid)
   , CASE WHEN tv.is_materialized
       THEN 'MATERIALIZED VIEW'
       ELSE 'VIEW'
@@ -78,10 +80,10 @@ BEGIN
   , tv.schema_name
   , tv.name
   , FORMAT(
-      'CREATE OR REPLACE %s %I.%I AS %s;'
+      'CREATE %s %I.%I AS %s;'
     , CASE WHEN tv.is_materialized
         THEN 'MATERIALIZED VIEW'
-        ELSE 'VIEW'
+        ELSE 'OR REPLACE VIEW'
       END
     , tv.schema_name
     , tv.name
@@ -89,6 +91,6 @@ BEGIN
     )
   , FALSE
   FROM ranked r
-  JOIN target_views tv
+  JOIN _migrations.target_views tv
     ON tv.oid = r.oid;
 END $FUNC$ LANGUAGE PLPGSQL;

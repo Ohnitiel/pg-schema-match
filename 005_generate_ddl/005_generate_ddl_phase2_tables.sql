@@ -1,17 +1,44 @@
-CREATE OR REPLACE FUNCTION generate_ddl_phase2_tables()
-RETURNS VOID
+CREATE OR REPLACE PROCEDURE _migrations.generate_ddl_phase2_tables()
 AS $FUNC$
+DECLARE
+  v_max_phase_seq INT;
 BEGIN
   RAISE NOTICE 'Generating DDL for phase 2 (tables)...';
+  -- Create new schemas
+  WITH new_schemas AS (
+    SELECT DISTINCT schema_name
+    FROM _migrations.new_tables
+  )
+  INSERT INTO _migrations.migration_ddl (
+    phase, seq, object_type, ddl_operation
+  , schema_name, object_name
+  , ddl, is_temporary_drop
+  )
+  SELECT
+  2
+  , ROW_NUMBER() OVER (ORDER BY schema_name)
+  , 'SCHEMA'
+  , 'CREATE'
+  , schema_name
+  , schema_name
+  , FORMAT(
+      'CREATE SCHEMA IF NOT EXISTS %I;'
+    , schema_name
+    )
+  , FALSE
+  FROM new_schemas;
+
+  v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 2);
   -- Create new tables (columns added next)
-  INSERT INTO migration_ddl (
+  INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
   , schema_name, object_name
   , ddl, is_temporary_drop
   )
   SELECT
     2
-  , ROW_NUMBER() OVER (ORDER BY schema_name, name)
+  , v_max_phase_seq
+    + ROW_NUMBER() OVER (ORDER BY schema_name, name)
   , 'TABLE'
   , 'CREATE'
   , schema_name
@@ -22,17 +49,19 @@ BEGIN
     , name
     )
   , FALSE
-  FROM new_tables;
+  FROM _migrations.new_tables;
 
+  v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 2);
   -- Add all columns to new tables
-  INSERT INTO migration_ddl (
+  INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
   , schema_name, table_name, object_name
   , ddl, is_temporary_drop
   )
   SELECT
     2
-  , ROW_NUMBER() OVER (ORDER BY tc.schema_name, tc.table_name, tc.name)
+  , v_max_phase_seq 
+    + ROW_NUMBER() OVER (ORDER BY tc.schema_name, tc.table_name, tc.name)
   , 'COLUMN'
   , 'CREATE'
   , tc.schema_name
@@ -51,20 +80,22 @@ BEGIN
       END
     )
   , FALSE
-  FROM target_columns tc
-  JOIN new_tables nt
+  FROM _migrations.target_columns tc
+  JOIN _migrations.new_tables nt
     ON nt.schema_name = tc.schema_name
     AND nt.name       = tc.table_name;
 
+  v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 2);
   -- Alter columns on existing tables
-  INSERT INTO migration_ddl (
+  INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
   , schema_name, table_name, object_name
   , ddl, is_temporary_drop
   )
   SELECT
     2
-  , ROW_NUMBER() OVER (ORDER BY cd.schema_name, cd.table_name, cd.name)
+  , v_max_phase_seq 
+    + ROW_NUMBER() OVER (ORDER BY cd.schema_name, cd.table_name, cd.name)
   , 'COLUMN'
   , 'ALTER'
   , cd.schema_name
@@ -88,26 +119,28 @@ BEGIN
       END
     )
   , FALSE
-  FROM columns_diff cd
+  FROM _migrations.columns_diff cd
   -- skip columns belonging to new tables
   WHERE NOT EXISTS (
     SELECT 1
-    FROM new_tables nt
+    FROM _migrations.new_tables nt
     WHERE nt.schema_name = cd.schema_name
       AND nt.name        = cd.table_name
   )
   -- skip new columns (handled separately below)
   AND NOT cd.new_column;
 
+  v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 2);
   -- Add new columns to existing tables
-  INSERT INTO migration_ddl (
+  INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
   , schema_name, table_name, object_name
   , ddl, is_temporary_drop
   )
   SELECT
     2
-  , ROW_NUMBER() OVER (ORDER BY cd.schema_name, cd.table_name, cd.name)
+  , v_max_phase_seq 
+    + ROW_NUMBER() OVER (ORDER BY cd.schema_name, cd.table_name, cd.name)
   , 'COLUMN'
   , 'CREATE'
   , cd.schema_name
@@ -126,24 +159,26 @@ BEGIN
       END
     )
   , FALSE
-  FROM columns_diff cd
+  FROM _migrations.columns_diff cd
   WHERE cd.new_column
   AND NOT EXISTS (
     SELECT 1
-    FROM new_tables nt
+    FROM _migrations.new_tables nt
     WHERE nt.schema_name = cd.schema_name
       AND nt.name        = cd.table_name
   );
 
+  v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 2);
   -- Drop removed columns from existing tables
-  INSERT INTO migration_ddl (
+  INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
   , schema_name, table_name, object_name
   , ddl, is_temporary_drop
   )
   SELECT
     2
-  , ROW_NUMBER() OVER (ORDER BY dc.schema_name, dc.table_name, dc.name)
+  , v_max_phase_seq 
+    + ROW_NUMBER() OVER (ORDER BY dc.schema_name, dc.table_name, dc.name)
   , 'COLUMN'
   , 'DROP'
   , dc.schema_name
@@ -156,17 +191,19 @@ BEGIN
     , dc.name
     )
   , FALSE
-  FROM dropped_columns dc;
+  FROM _migrations.dropped_columns dc;
 
+  v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 2);
   -- Drop removed tables
-  INSERT INTO migration_ddl (
+  INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
   , schema_name, object_name
   , ddl, is_temporary_drop
   )
   SELECT
     2
-  , ROW_NUMBER() OVER (ORDER BY schema_name, name)
+  , v_max_phase_seq 
+    + ROW_NUMBER() OVER (ORDER BY schema_name, name)
   , 'TABLE'
   , 'DROP'
   , schema_name
@@ -177,5 +214,5 @@ BEGIN
     , name
     )
   , FALSE
-  FROM dropped_tables;
+  FROM _migrations.dropped_tables;
 END $FUNC$ LANGUAGE PLPGSQL;

@@ -1,21 +1,23 @@
-CREATE OR REPLACE FUNCTION generate_diff()
-RETURNS VOID
+CREATE OR REPLACE PROCEDURE _migrations.generate_diff()
 AS $FUNC$
 BEGIN
+  RAISE NOTICE 'Starting schema comparison...';
 
   RAISE NOTICE 'Identifying new tables...';
-  CREATE TABLE new_tables AS
+  DROP TABLE IF EXISTS _migrations.new_tables;
+  CREATE TABLE _migrations.new_tables AS
   SELECT
     tt.schema_name, tt.name
-  FROM target_tables tt
-  LEFT JOIN current_tables ct
+  FROM _migrations.target_tables tt
+  LEFT JOIN _migrations.current_tables ct
     ON tt.schema_name = ct.schema_name
     AND tt.name = ct.name
   WHERE ct.oid IS NULL
-  AND ct.relkind = 'r';
+  AND tt.relkind = 'r';
 
   RAISE NOTICE 'Identifying column differences...';
-  CREATE TABLE columns_diff AS
+  DROP TABLE IF EXISTS _migrations.columns_diff;
+  CREATE TABLE _migrations.columns_diff AS
   SELECT
     tc.schema_name
   , tc.table_name
@@ -26,12 +28,12 @@ BEGIN
   , tc.default
   , cc.table_oid IS NULL AS new_column
   , nt.name IS NOT NULL AS new_table
-  FROM target_columns tc
-  LEFT JOIN current_columns cc
+  FROM _migrations.target_columns tc
+  LEFT JOIN _migrations.current_columns cc
     ON tc.schema_name = cc.schema_name
     AND tc.table_name = cc.table_name
     AND tc.name = cc.name
-  LEFT JOIN new_tables nt
+  LEFT JOIN _migrations.new_tables nt
     ON tc.schema_name = nt.schema_name
     AND tc.table_name = nt.name
   WHERE
@@ -42,7 +44,8 @@ BEGIN
     OR COALESCE(tc.default, '-1') <> COALESCE(cc.default, '-1');
 
   RAISE NOTICE 'Identifying constraint differences...';
-  CREATE TABLE constraints_diff AS
+  DROP TABLE IF EXISTS _migrations.constraints_diff;
+  CREATE TABLE _migrations.constraints_diff AS
   SELECT
     tc.oid
   , tc.table_oid
@@ -52,17 +55,18 @@ BEGIN
   , cc.oid IS NULL AS is_new
   , cc.oid IS NULL
       AND tc.expression <> cc.expression AS is_changed
-  FROM target_constraints tc
-  JOIN target_tables tt
+  FROM _migrations.target_constraints tc
+  JOIN _migrations.target_tables tt
     ON tc.table_oid = tt.oid
-  JOIN current_tables ct
+  JOIN _migrations.current_tables ct
     ON tt.schema_name = ct.schema_name
     AND tt.name = ct.name
-  LEFT JOIN current_constraints cc
+  LEFT JOIN _migrations.current_constraints cc
     ON ct.oid = cc.table_oid;
 
   RAISE NOTICE 'Identifying index differences...';
-  CREATE TABLE indexes_diff AS
+  DROP TABLE IF EXISTS _migrations.indexes_diff;
+  CREATE TABLE _migrations.indexes_diff AS
   SELECT
     ti.oid
   , ti.table_oid
@@ -71,17 +75,18 @@ BEGIN
   , ci.oid IS NULL AS is_new
   , ci.oid IS NULL
       AND ti.expression <> ci.expression AS is_changed
-  FROM target_indexes ti
-  JOIN target_tables tt
+  FROM _migrations.target_indexes ti
+  JOIN _migrations.target_tables tt
     ON ti.table_oid = tt.oid
-  JOIN current_tables ct
+  JOIN _migrations.current_tables ct
     ON tt.schema_name = ct.schema_name
     AND tt.name = ct.name
-  LEFT JOIN current_indexes ci
+  LEFT JOIN _migrations.current_indexes ci
     ON ci.oid = ci.table_oid;
 
   RAISE NOTICE 'Identifying sequence differences...';
-  CREATE TABLE sequences_diff AS
+  DROP TABLE IF EXISTS _migrations.sequences_diff;
+  CREATE TABLE _migrations.sequences_diff AS
   SELECT
     ts.oid
   , ts.schema_name
@@ -100,8 +105,8 @@ BEGIN
       OR ts.cycles <> cs.cycles
       OR ts.type <> cs.type
     ) AS is_changed
-  FROM target_sequences ts
-  LEFT JOIN current_sequences cs
+  FROM _migrations.target_sequences ts
+  LEFT JOIN _migrations.current_sequences cs
     ON ts.schema_name = cs.schema_name
     AND ts.name       = cs.name
   WHERE cs.oid IS NULL
@@ -112,7 +117,8 @@ BEGIN
     OR ts.type <> cs.type;
 
   RAISE NOTICE 'Identifying view differences...';
-  CREATE TABLE views_diff AS
+  DROP TABLE IF EXISTS _migrations.views_diff;
+  CREATE TABLE _migrations.views_diff AS
   SELECT
     tv.oid
   , tv.schema_name
@@ -122,56 +128,60 @@ BEGIN
   , cv.oid IS NULL AS is_new
   , cv.oid IS NOT NULL
       AND tv.expression <> cv.expression AS is_changed
-  FROM target_views tv
-  LEFT JOIN current_views cv
+  FROM _migrations.target_views tv
+  LEFT JOIN _migrations.current_views cv
     ON tv.schema_name = cv.schema_name
     AND tv.name = cv.name
   WHERE cv.oid IS NULL
     OR tv.expression <> cv.expression;
 
   RAISE NOTICE 'Identifying dropped tables...';
-  CREATE TABLE dropped_tables AS
+  DROP TABLE IF EXISTS _migrations.dropped_tables;
+  CREATE TABLE _migrations.dropped_tables AS
   SELECT ct.oid, ct.schema_name, ct.name
-  FROM current_tables ct
-  LEFT JOIN target_tables tt
+  FROM _migrations.current_tables ct
+  LEFT JOIN _migrations.target_tables tt
     ON ct.schema_name = tt.schema_name
     AND ct.name = tt.name
   WHERE tt.oid IS NULL;
 
   RAISE NOTICE 'Identifying dropped columns...';
-  CREATE TABLE dropped_columns AS
+  DROP TABLE IF EXISTS _migrations.dropped_columns;
+  CREATE TABLE _migrations.dropped_columns AS
   SELECT cc.schema_name, cc.table_name, cc.name
-  FROM current_columns cc
-  LEFT JOIN target_columns tc
+  FROM _migrations.current_columns cc
+  LEFT JOIN _migrations.target_columns tc
     ON cc.schema_name = tc.schema_name
     AND cc.table_name = tc.table_name
     AND cc.name       = tc.name
   WHERE tc.table_oid IS NULL
     AND cc.schema_name NOT IN (
-      SELECT schema_name FROM dropped_tables
+      SELECT schema_name FROM _migrations.dropped_tables
     )
     AND cc.table_name NOT IN (
-      SELECT name FROM dropped_tables dt
+      SELECT name FROM _migrations.dropped_tables dt
       WHERE dt.schema_name = cc.schema_name
     );
 
   RAISE NOTICE 'Identifying dropped constraints...';
-  CREATE TABLE dropped_constraints AS
+  DROP TABLE IF EXISTS _migrations.dropped_constraints;
+  CREATE TABLE _migrations.dropped_constraints AS
   SELECT cc.oid, cc.name, cc.type, cc.table_oid, cc.expression
-  FROM current_constraints cc
-  LEFT JOIN target_constraints tc
+  FROM _migrations.current_constraints cc
+  LEFT JOIN _migrations.target_constraints tc
     ON cc.name = tc.name
   WHERE tc.oid IS NULL
-    AND cc.table_oid NOT IN (SELECT oid FROM dropped_tables);
+    AND cc.table_oid NOT IN (SELECT oid FROM _migrations.dropped_tables);
 
   RAISE NOTICE 'Identifying dropped indexes...';
-  CREATE TABLE dropped_indexes AS
+  DROP TABLE IF EXISTS _migrations.dropped_indexes;
+  CREATE TABLE _migrations.dropped_indexes AS
   SELECT ci.oid, ci.name, ci.table_oid, ci.expression
-  FROM current_indexes ci
-  LEFT JOIN target_indexes ti
+  FROM _migrations.current_indexes ci
+  LEFT JOIN _migrations.target_indexes ti
     ON ci.name = ti.name
   WHERE ti.oid IS NULL
-    AND ci.table_oid NOT IN (SELECT oid FROM dropped_tables);
+    AND ci.table_oid NOT IN (SELECT oid FROM _migrations.dropped_tables);
 
   RAISE NOTICE 'Diff generation complete.';
 END $FUNC$ LANGUAGE PLPGSQL;

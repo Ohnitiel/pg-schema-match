@@ -1,7 +1,8 @@
-CREATE OR REPLACE FUNCTION set_up_fdw(
+CREATE SCHEMA IF NOT EXISTS _migrations;
+
+CREATE OR REPLACE PROCEDURE _migrations.set_up_fdw(
   p_model_db TEXT, p_target_user TEXT, p_target_password TEXT
 )
-RETURNS VOID
 AS $FUNC$
 DECLARE
   v_create_server_ddl TEXT := FORMAT(

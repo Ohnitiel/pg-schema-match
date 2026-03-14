@@ -1,5 +1,4 @@
-CREATE OR REPLACE FUNCTION generate_ddl()
-RETURNS VOID
+CREATE OR REPLACE PROCEDURE _migrations.generate_ddl()
 AS $FUNC$
 BEGIN
   RAISE NOTICE 'Starting DDL generation...';
@@ -10,8 +9,9 @@ BEGIN
     3 - Finalization: Recreate views, FK, indexes
   */
 
-  CREATE TABLE migration_ddl (
-    id BIGSERIAL PRIMARY KEY
+  DROP TABLE IF EXISTS _migrations.migration_ddl;
+  CREATE TABLE _migrations.migration_ddl (
+    id SERIAL PRIMARY KEY
   , phase INT NOT NULL
   , seq INT NOT NULL
   , object_type TEXT NOT NULL
@@ -26,7 +26,7 @@ BEGIN
   , is_temporary_drop BOOL NOT NULL DEFAULT FALSE
 
   , CONSTRAINT object_type_ck CHECK (object_type IN
-      ('TABLE', 'COLUMN', 'CONSTRAINT', 'VIEW', 'MATERIALIZED VIEW', 'INDEX', 'SEQUENCE')
+      ('SCHEMA', 'TABLE', 'COLUMN', 'CONSTRAINT', 'VIEW', 'MATERIALIZED VIEW', 'INDEX', 'SEQUENCE')
     )
   , CONSTRAINT ddl_operation_ck CHECK(ddl_operation IN 
       ('CREATE', 'DROP', 'ALTER')
@@ -34,35 +34,27 @@ BEGIN
   , CONSTRAINT status_ck CHECK (status IN 
       ('PENDING', 'DONE', 'ERROR', 'SKIPPED')
     )
-  , CONSTRAINT phase_fk FOREIGN KEY (phase) REFERENCES migration_phases(phase)
+  , CONSTRAINT phase_fk FOREIGN KEY (phase) REFERENCES _migrations.migration_phases(phase)
   );
 
   -- Phase 1 — Preparation (drop dependent objects)
   RAISE NOTICE 'Generating Phase 1 DDL (Views)...';
-  PERFORM generate_ddl_phase1_views();
+  CALL _migrations.generate_ddl_phase1_views();
   RAISE NOTICE 'Generating Phase 1 DDL (Constraints)...';
-  PERFORM generate_ddl_phase1_constraints();
+  CALL _migrations.generate_ddl_phase1_constraints();
   RAISE NOTICE 'Generating Phase 1 DDL (Indexes)...';
-  PERFORM generate_ddl_phase1_indexes();
+  CALL _migrations.generate_ddl_phase1_indexes();
 
   -- Phase 2 — Alteration (structural changes)
   RAISE NOTICE 'Generating Phase 2 DDL (Tables/Columns)...';
-  PERFORM generate_ddl_phase2_tables();
-  PERFORM generate_ddl_phase2_constraints();  -- new/dropped CHECK, UNIQUE
-  PERFORM generate_ddl_phase2_sequences();
+  CALL _migrations.generate_ddl_phase2_sequences();
+  CALL _migrations.generate_ddl_phase2_tables();
+  CALL _migrations.generate_ddl_phase2_constraints();  -- new/dropped CHECK, UNIQUE
 
   -- Phase 3 — Finalization (rebuild dropped objects)
-  PERFORM generate_ddl_phase3_indexes();
-  PERFORM generate_ddl_phase3_constraints();  -- recreate PKs, FKs
-  PERFORM generate_ddl_phase3_views();        -- recreate managed views
+  CALL _migrations.generate_ddl_phase3_indexes();
+  CALL _migrations.generate_ddl_phase3_constraints();  -- recreate PKs, FKs
+  CALL _migrations.generate_ddl_phase3_views();        -- recreate managed views
 
-  -- Execution
-  -- PERFORM execute_migration(p_dry_run);
-
-  -- Output
-  -- PERFORM generate_flyway_files();
-
-  -- Report
-  -- PERFORM post_run_report();
   RAISE NOTICE 'DDL generation complete.';
 END $FUNC$ LANGUAGE PLPGSQL;

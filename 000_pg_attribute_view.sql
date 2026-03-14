@@ -1,3 +1,6 @@
+/*
+ This view must be created on model database to avoid any type array error
+ */
 CREATE OR REPLACE VIEW migrations.pg_attribute AS
 SELECT
   attrelid

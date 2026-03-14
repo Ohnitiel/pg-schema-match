@@ -1,3 +1,7 @@
+/*
+  This view must be created on model database in order to catch objects
+  definitions.
+ */
 CREATE SCHEMA IF NOT EXISTS migrations;
 
 CREATE OR REPLACE VIEW migrations.definitions AS

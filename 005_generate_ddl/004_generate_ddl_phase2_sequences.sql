@@ -1,17 +1,19 @@
-CREATE OR REPLACE FUNCTION generate_ddl_phase2_sequences()
-RETURNS VOID
+CREATE OR REPLACE PROCEDURE _migrations.generate_ddl_phase2_sequences()
 AS $FUNC$
+DECLARE
+  v_max_phase_seq INT := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 2);
 BEGIN
   RAISE NOTICE 'Generating DDL for phase 2 (sequences)...';
   -- Create new sequences
-  INSERT INTO migration_ddl (
+  INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
   , schema_name, object_name
   , ddl, is_temporary_drop
   )
   SELECT
     2
-  , ROW_NUMBER() OVER (ORDER BY ts.schema_name, ts.name)
+  , v_max_phase_seq 
+    + ROW_NUMBER() OVER (ORDER BY ts.schema_name, ts.name)
   , 'SEQUENCE'
   , 'CREATE'
   , ts.schema_name
@@ -28,20 +30,22 @@ BEGIN
     , CASE WHEN ts.cycles THEN ' CYCLE' ELSE ' NO CYCLE' END
     )
   , FALSE
-  FROM sequences_diff sd
-  JOIN target_sequences ts
+  FROM _migrations.sequences_diff sd
+  JOIN _migrations.target_sequences ts
     ON ts.oid = sd.oid
   WHERE sd.is_new;
 
+  v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 2);
   -- Alter changed sequence properties
-  INSERT INTO migration_ddl (
+  INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
   , schema_name, object_name
   , ddl, is_temporary_drop
   )
   SELECT
     2
-  , ROW_NUMBER() OVER (ORDER BY ts.schema_name, ts.name)
+  , v_max_phase_seq 
+    + ROW_NUMBER() OVER (ORDER BY ts.schema_name, ts.name)
   , 'SEQUENCE'
   , 'ALTER'
   , ts.schema_name
@@ -57,8 +61,8 @@ BEGIN
     , CASE WHEN ts.cycles THEN ' CYCLE' ELSE ' NO CYCLE' END
     )
   , FALSE
-  FROM sequences_diff sd
-  JOIN target_sequences ts
+  FROM _migrations.sequences_diff sd
+  JOIN _migrations.target_sequences ts
     ON ts.oid = sd.oid
   WHERE sd.is_changed;
 END $FUNC$ LANGUAGE PLPGSQL;
