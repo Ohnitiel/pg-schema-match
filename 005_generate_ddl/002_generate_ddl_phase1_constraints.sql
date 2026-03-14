@@ -167,44 +167,53 @@ BEGIN
   );
 
   -- Drop constraints backed by indexes that will be dropped
-  -- INSERT INTO _migrations.migration_ddl (
-  --   phase, seq, object_type, ddl_operation
-  -- , schema_name, table_name, object_name
-  -- , ddl, is_temporary_drop
-  -- )
-  -- SELECT
-  --   1
-  -- , v_max_phase_seq
-  --   + ROW_NUMBER() OVER (ORDER BY ct.schema_name, ct.name, cc.name)
-  -- , 'CONSTRAINT'
-  -- , 'DROP'
-  -- , ct.schema_name
-  -- , ct.name
-  -- , cc.name
-  -- , FORMAT(
-  --     'ALTER TABLE %I.%I DROP CONSTRAINT IF EXISTS %I;'
-  --   , ct.schema_name
-  --   , ct.name
-  --   , cc.name
-  --   )
-  -- , TRUE
-  -- FROM _migrations.current_constraints cc
-  -- JOIN _migrations.current_tables ct
-  --   ON ct.oid = cc.table_oid
-  -- -- only constraints that are backed by an index
-  -- JOIN _migrations.current_indexes ci
-  --   ON ci.table_oid = cc.table_oid
-  -- JOIN pg_constraint pc
-  --   ON pc.conindid = ci.oid
-  --   AND pc.conname = cc.name
-  -- WHERE NOT EXISTS (
-  --   SELECT 1
-  --   FROM _migrations.migration_ddl md
-  --   WHERE md.phase         = 1
-  --     AND md.object_type   = 'CONSTRAINT'
-  --     AND md.ddl_operation = 'DROP'
-  --     AND md.object_name   = cc.name
-  --     AND md.table_name    = ct.name
-  -- );
+  INSERT INTO _migrations.migration_ddl (
+    phase, seq, object_type, ddl_operation
+  , schema_name, table_name, object_name
+  , ddl, is_temporary_drop
+  )
+  SELECT
+    1
+  , v_max_phase_seq
+    + ROW_NUMBER() OVER (ORDER BY ct.schema_name, ct.name, cc.name)
+  , 'CONSTRAINT'
+  , 'DROP'
+  , ct.schema_name
+  , ct.name
+  , cc.name
+  , FORMAT(
+      'ALTER TABLE %I.%I DROP CONSTRAINT IF EXISTS %I;'
+    , ct.schema_name
+    , ct.name
+    , cc.name
+    )
+  , TRUE
+  FROM _migrations.current_constraints cc
+  JOIN _migrations.current_tables ct
+    ON ct.oid = cc.table_oid
+  -- only constraints that are backed by an index
+  JOIN _migrations.current_indexes ci
+    ON ci.table_oid = cc.table_oid
+  JOIN pg_constraint pc
+    ON pc.conindid = ci.oid
+    AND pc.conname = cc.name
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM _migrations.target_indexes ti
+    JOIN _migrations.target_tables tt
+      ON ti.table_oid = tt.oid
+    WHERE ci.name = ti.name
+    AND ct.schema_name = tt.schema_name
+    AND ct.name = tt.name
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM _migrations.migration_ddl md
+    WHERE md.phase         = 1
+      AND md.object_type   = 'CONSTRAINT'
+      AND md.ddl_operation = 'DROP'
+      AND md.object_name   = cc.name
+      AND md.table_name    = ct.name
+  );
 
 END $FUNC$ LANGUAGE PLPGSQL;

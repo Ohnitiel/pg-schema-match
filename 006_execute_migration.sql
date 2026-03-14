@@ -22,7 +22,7 @@ BEGIN
       , executed_at = NOW()
       WHERE id = v_record.id;
 
-      RAISE INFO '[Phase %/Seq %] % % %.% — OK'
+      RAISE NOTICE '[Phase %/Seq %] % % %.% — OK'
         , v_record.phase
         , v_record.seq
         , v_record.ddl_operation
@@ -51,8 +51,8 @@ BEGIN
   END LOOP;
 
   IF p_dry_run THEN
-    RAISE INFO '--- DRY RUN: rolling back all changes ---';
-    RAISE INFO 'Check _migrations.migration_ddl for full execution report';
+    RAISE NOTICE '--- DRY RUN: rolling back all changes ---';
+    RAISE NOTICE 'Check _migrations.migration_ddl for full execution report';
     ROLLBACK;
     -- migration_ddl updates roll back too, so reset status for clean re-run
   ELSE
@@ -61,7 +61,7 @@ BEGIN
       RAISE WARNING 'Check: SELECT * FROM _migrations.migration_ddl WHERE status = ''ERROR''';
       ROLLBACK;
     ELSE
-      RAISE INFO '--- LIVE RUN COMPLETED SUCCESSFULLY ---';
+      RAISE NOTICE '--- LIVE RUN COMPLETED SUCCESSFULLY ---';
       COMMIT;
     END IF;
   END IF;

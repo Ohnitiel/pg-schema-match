@@ -4,6 +4,7 @@ DECLARE
   v_max_phase_seq INT := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 3);
 BEGIN
   RAISE NOTICE 'Generating DDL for phase 3 (views)...';
+
   -- Recreate managed views from target definition
   -- ordered by depth ASC so base views are created before dependent ones
   INSERT INTO _migrations.migration_ddl (

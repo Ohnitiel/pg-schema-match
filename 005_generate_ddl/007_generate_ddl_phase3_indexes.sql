@@ -1,6 +1,8 @@
 CREATE OR REPLACE PROCEDURE _migrations.generate_ddl_phase3_indexes()
 AS $FUNC$
 BEGIN
+  RAISE NOTICE 'Generating DDL for phase 3 (indexes)...';
+
   INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
   , schema_name, object_name
