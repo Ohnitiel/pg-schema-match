@@ -6,7 +6,7 @@ DECLARE
 BEGIN
   RAISE NOTICE 'Starting migration execution...';
 
-  BEGIN TRANSACTION; 
+  BEGIN
     FOR v_record IN (
       SELECT id, phase, seq, object_type, ddl_operation
           , schema_name, table_name, object_name, ddl
