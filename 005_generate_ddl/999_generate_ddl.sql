@@ -31,7 +31,7 @@ BEGIN
       ('CREATE', 'DROP', 'ALTER')
     )
   , CONSTRAINT status_ck CHECK (status IN 
-      ('PENDING', 'DONE', 'ERROR', 'SKIPPED')
+      ('PENDING', 'DONE', 'ERROR', 'SKIPPED', 'DRY RUN')
     )
   , CONSTRAINT phase_fk FOREIGN KEY (phase) REFERENCES _migrations.migration_phases(phase)
   );

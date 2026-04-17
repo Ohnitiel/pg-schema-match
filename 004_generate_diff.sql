@@ -18,6 +18,7 @@ BEGIN
   RAISE NOTICE 'Identifying column differences...';
   DROP TABLE IF EXISTS _migrations.columns_diff;
   CREATE TABLE _migrations.columns_diff AS
+  -- NEW COLUMNS
   SELECT
     tc.schema_name
   , tc.table_name
@@ -26,22 +27,152 @@ BEGIN
   , tc.nullable
   , tc.length
   , tc.default
-  , cc.table_oid IS NULL AS new_column
+  , 'ADD_COLUMN' AS operation_type
   , nt.name IS NOT NULL AS new_table
   FROM _migrations.target_columns tc
   LEFT JOIN _migrations.current_columns cc
     ON tc.schema_name = cc.schema_name
     AND tc.table_name = cc.table_name
     AND tc.name = cc.name
+  LEFT JOIN _migrations.current_tables ct
+    ON cc.table_oid = ct.oid
   LEFT JOIN _migrations.new_tables nt
     ON tc.schema_name = nt.schema_name
     AND tc.table_name = nt.name
   WHERE
     cc.table_oid IS NULL
-    OR tc.type <> cc.type
-    OR tc.nullable <> cc.nullable
-    OR COALESCE(tc.length, -1) <> COALESCE(cc.length, -1)
-    OR COALESCE(tc.default, '-1') <> COALESCE(cc.default, '-1');
+
+  UNION ALL
+
+  -- TYPE CHANGES
+  SELECT
+    tc.schema_name
+  , tc.table_name
+  , tc.name
+  , tc.type
+  , tc.nullable
+  , tc.length
+  , tc.default
+  , 'ALTER_TYPE' AS operation_type
+  , nt.name IS NOT NULL AS new_table
+  FROM _migrations.target_columns tc
+  LEFT JOIN _migrations.current_columns cc
+    ON tc.schema_name = cc.schema_name
+    AND tc.table_name = cc.table_name
+    AND tc.name = cc.name
+  LEFT JOIN _migrations.current_tables ct
+    ON cc.table_oid = ct.oid
+  LEFT JOIN _migrations.new_tables nt
+    ON tc.schema_name = nt.schema_name
+    AND tc.table_name = nt.name
+  WHERE cc.table_oid IS NOT NULL
+    AND (
+      tc.type <> cc.type
+      OR COALESCE(tc.length, -1) <> COALESCE(cc.length, -1)
+    )
+
+  UNION ALL
+
+  -- SET NOT NULL
+  SELECT
+    tc.schema_name
+  , tc.table_name
+  , tc.name
+  , tc.type
+  , tc.nullable
+  , tc.length
+  , tc.default
+  , 'SET_NOT_NULL' AS operation_type
+  , nt.name IS NOT NULL AS new_table
+  FROM _migrations.target_columns tc
+  LEFT JOIN _migrations.current_columns cc
+    ON tc.schema_name = cc.schema_name
+    AND tc.table_name = cc.table_name
+    AND tc.name = cc.name
+  LEFT JOIN _migrations.current_tables ct
+    ON cc.table_oid = ct.oid
+  LEFT JOIN _migrations.new_tables nt
+    ON tc.schema_name = nt.schema_name
+    AND tc.table_name = nt.name
+  WHERE tc.nullable <> cc.nullable AND cc.nullable AND cc.table_oid IS NOT NULL
+
+  UNION ALL
+
+  -- DROP NOT NULL
+  SELECT
+    tc.schema_name
+  , tc.table_name
+  , tc.name
+  , tc.type
+  , tc.nullable
+  , tc.length
+  , tc.default
+  , 'DROP_NOT_NULL' AS operation_type
+  , nt.name IS NOT NULL AS new_table
+  FROM _migrations.target_columns tc
+  LEFT JOIN _migrations.current_columns cc
+    ON tc.schema_name = cc.schema_name
+    AND tc.table_name = cc.table_name
+    AND tc.name = cc.name
+  LEFT JOIN _migrations.current_tables ct
+    ON cc.table_oid = ct.oid
+  LEFT JOIN _migrations.new_tables nt
+    ON tc.schema_name = nt.schema_name
+    AND tc.table_name = nt.name
+  WHERE tc.nullable <> cc.nullable AND tc.nullable AND cc.table_oid IS NOT NULL
+
+  UNION ALL
+
+  -- DROP DEFAULT
+  SELECT
+    tc.schema_name
+  , tc.table_name
+  , tc.name
+  , tc.type
+  , tc.nullable
+  , tc.length
+  , tc.default
+  , 'DROP_DEFAULT' AS operation_type
+  , nt.name IS NOT NULL AS new_table
+  FROM _migrations.target_columns tc
+  LEFT JOIN _migrations.current_columns cc
+    ON tc.schema_name = cc.schema_name
+    AND tc.table_name = cc.table_name
+    AND tc.name = cc.name
+  LEFT JOIN _migrations.current_tables ct
+    ON cc.table_oid = ct.oid
+  LEFT JOIN _migrations.new_tables nt
+    ON tc.schema_name = nt.schema_name
+    AND tc.table_name = nt.name
+  WHERE COALESCE(tc.default, '') <> COALESCE(cc.default, '')
+    AND tc.default IS NULL AND cc.table_oid IS NOT NULL
+
+  UNION ALL
+
+  -- SET DEFAULT
+  SELECT
+    tc.schema_name
+  , tc.table_name
+  , tc.name
+  , tc.type
+  , tc.nullable
+  , tc.length
+  , tc.default
+  , 'SET_DEFAULT' AS operation_type
+  , nt.name IS NOT NULL AS new_table
+  FROM _migrations.target_columns tc
+  LEFT JOIN _migrations.current_columns cc
+    ON tc.schema_name = cc.schema_name
+    AND tc.table_name = cc.table_name
+    AND tc.name = cc.name
+  LEFT JOIN _migrations.current_tables ct
+    ON cc.table_oid = ct.oid
+  LEFT JOIN _migrations.new_tables nt
+    ON tc.schema_name = nt.schema_name
+    AND tc.table_name = nt.name
+  WHERE COALESCE(tc.default, '') <> COALESCE(cc.default, '')
+    AND tc.default IS NOT NULL AND cc.table_oid IS NOT NULL
+  ;
 
   RAISE NOTICE 'Identifying constraint differences...';
   DROP TABLE IF EXISTS _migrations.constraints_diff;

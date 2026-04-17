@@ -41,6 +41,11 @@ BEGIN
   , schema_name TEXT NOT NULL
   , name TEXT NOT NULL
   , relkind CHAR NOT NULL
+  , strategy TEXT NOT NULL
+
+  , CONSTRAINT strategy_ck CHECK (strategy IN
+      ('SHADOW','AGGREGATE', 'DIRECT')
+    )
   );
 
   CREATE TABLE IF NOT EXISTS _migrations.target_columns (

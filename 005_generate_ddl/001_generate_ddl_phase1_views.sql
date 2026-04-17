@@ -44,11 +44,12 @@ BEGIN
   AND NOT EXISTS (
     SELECT 1 FROM _migrations.tenant_views tv
     WHERE tv.oid = c.oid
-  )
-
-  UNION 
+  );
 
   -- Views depending on dropped tables
+  INSERT INTO _migrations.tenant_views (
+    oid, schema_name, name, expression, is_materialized, depends_on
+  )
   SELECT DISTINCT
     c.oid
   , n.nspname
