@@ -3,7 +3,7 @@ AS $FUNC$
 DECLARE
   v_max_phase_seq INT := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 2);
 BEGIN
-  RAISE NOTICE 'Generating DDL for phase 2 (tables)...';
+  RAISE NOTICE '% - Generating DDL for phase 2 (tables)...', clock_timestamp();
   v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 2);
   -- Create new tables (columns added next)
   INSERT INTO _migrations.migration_ddl (
@@ -25,7 +25,8 @@ BEGIN
     , name
     )
   , FALSE
-  FROM _migrations.new_tables;
+  FROM _migrations.tables_diff td
+  WHERE td.is_new;
 
   v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 2);
   -- Add all columns to new tables
@@ -73,10 +74,11 @@ BEGIN
     )
   , FALSE
   FROM _migrations.target_columns tc
-  JOIN _migrations.new_tables nt
-    ON nt.schema_name = tc.schema_name
-    AND nt.name       = tc.table_name
-  GROUp BY tc.schema_name, tc.table_name;
+  JOIN _migrations.tables_diff td
+    ON td.schema_name = tc.schema_name
+    AND td.name       = tc.table_name
+  WHERE td.is_new
+  GROUP BY tc.schema_name, tc.table_name;
 
   v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 2);
   -- Alter columns on existing tables
@@ -86,9 +88,10 @@ BEGIN
     -- skip columns belonging to new tables
     WHERE NOT EXISTS (
       SELECT 1
-      FROM _migrations.new_tables nt
-      WHERE nt.schema_name = cd.schema_name
-        AND nt.name        = cd.table_name
+      FROM _migrations.tables_diff td
+      WHERE td.is_new
+      AND td.schema_name = cd.schema_name
+      AND td.name       = cd.table_name
     )
   )
   INSERT INTO _migrations.migration_ddl (
@@ -140,7 +143,13 @@ BEGIN
                   )
                 ELSE type
               END
-            , CASE WHEN NOT nullable THEN ' NOT NULL' ELSE '' END
+            , CASE 
+                WHEN operation_type = 'ADD_COLUMN' AND NOT nullable THEN ' NOT NULL '
+                WHEN operation_type = 'ADD_COLUMN' AND nullable THEN ''
+                WHEN nullable THEN ' SET NOT NULL '
+                WHEN NOT nullable THEN ' DROP NOT NULL '
+                ELSE ''
+              END
             , CASE WHEN "default" IS NOT NULL
                 THEN FORMAT(' DEFAULT %s', "default")
                 ELSE ''
@@ -178,44 +187,40 @@ BEGIN
     
     UNION ALL
 
-    -- TYPE changes require a full table rewrite so we go for shadowing
-    -- CREATE new_column with correct type
-    -- UPDATE new_column = old_column
-    -- DROP old_column
-    -- ALTER TABLE RENAME new_column TO old_column
+    -- TYPE changes require a full table rewrite
+    -- Group all type changes in a single ALTER TABLE operation
     SELECT
       schema_name
     , table_name
-    , name
+    , NULL
     , FORMAT(
-        'ALTER TABLE %1$I.%2$I ADD COLUMN new_%3$I %4$s%5$s%6$s;
-         UPDATE %1$I.%2$I SET new_%3$I = %3$I::%4$s;
-         ALTER TABLE %1$I.%2$I DROP COLUMN %3$I;
-         ALTER TABLE %1$I.%2$I RENAME COLUMN new_%3$I TO %3$I;'
+        'ALTER TABLE %I.%I %s;'
       , schema_name
       , table_name
-      , name
-      , CASE
-          WHEN type ILIKE '%char%'
-            THEN FORMAT(
-              '%s%s'
-            , type
-            , CASE length
-                WHEN -1 THEN ''
-                ELSE FORMAT('(%s)', length)
-              END
-            )
-          ELSE type
-        END
-      , CASE WHEN NOT nullable THEN ' NOT NULL' ELSE '' END
-      , CASE WHEN "default" IS NOT NULL
-          THEN FORMAT(' DEFAULT %s', "default")
-          ELSE ''
-        END
+      , STRING_AGG(
+          FORMAT(
+            'ALTER COLUMN %1$I TYPE %2$s USING %1$I::%2$s'
+          , name
+          , CASE
+              WHEN type ILIKE '%char%'
+                THEN FORMAT(
+                  '%s%s'
+                , type
+                , CASE length
+                    WHEN -1 THEN ''
+                    ELSE FORMAT('(%s)', length)
+                  END
+                )
+              ELSE type
+            END
+          )
+        , ', '
+        )
       )
     , FALSE
     FROM _base
     WHERE operation_type = 'ALTER_TYPE'
+    GROUP BY schema_name, table_name
   ) t;
 
   v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 2);
@@ -239,5 +244,6 @@ BEGIN
     , name
     )
   , FALSE
-  FROM _migrations.dropped_tables;
+  FROM _migrations.tables_diff td
+  WHERE td.operation_type = 'DROP_TABLE';
 END $FUNC$ LANGUAGE PLPGSQL;

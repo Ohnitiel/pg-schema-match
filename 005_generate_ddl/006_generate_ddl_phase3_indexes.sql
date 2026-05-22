@@ -1,7 +1,7 @@
 CREATE OR REPLACE PROCEDURE _migrations.generate_ddl_phase3_indexes()
 AS $FUNC$
 BEGIN
-  RAISE NOTICE 'Generating DDL for phase 3 (indexes)...';
+  RAISE NOTICE '% - Generating DDL for phase 3 (indexes)...', clock_timestamp();
 
   INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
@@ -21,6 +21,7 @@ BEGIN
       AND ct.schema_name = md.schema_name
     JOIN _migrations.target_indexes ti
       ON ti.name        = ci.name
+      AND ci.schema_name = ti.schema_name
     JOIN _migrations.target_tables tt
       ON tt.oid         = ti.table_oid
     WHERE md.phase            = 1
@@ -33,7 +34,7 @@ BEGIN
     3
   , ROW_NUMBER() OVER (ORDER BY schema_name, name)
   , 'INDEX'
-  , 'CREATE'
+  , 'RECREATE'
   , schema_name
   , name
   , expression || ';'

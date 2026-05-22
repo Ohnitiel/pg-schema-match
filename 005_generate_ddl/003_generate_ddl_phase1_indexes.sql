@@ -3,7 +3,7 @@ AS $FUNC$
 DECLARE
   v_max_phase_seq INT := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 1);
 BEGIN
-  RAISE NOTICE 'Generating DDL for phase 1 (indexes)...';
+  RAISE NOTICE '% - Generating DDL for phase 1 (indexes)...', clock_timestamp();
   -- Drop indexes on tables with altered columns
   -- (index may reference the column being changed)
   INSERT INTO _migrations.migration_ddl (
@@ -11,7 +11,7 @@ BEGIN
   , schema_name, object_name
   , ddl, is_temporary_drop
   )
-  SELECT
+  SELECT DISTINCT ON (ci.name, ct.schema_name)
     1
   , v_max_phase_seq 
     + ROW_NUMBER() OVER (ORDER BY ci.name)
@@ -38,12 +38,14 @@ BEGIN
     FROM pg_constraint pc
     WHERE pc.conindid = ci.oid
   )
+  AND cd.operation_type <> 'ADD_COLUMN'
   -- exclude indexes on new tables (nothing to drop)
   AND NOT EXISTS (
     SELECT 1
-    FROM _migrations.new_tables nt
+    FROM _migrations.tables_diff nt
     WHERE nt.schema_name = ct.schema_name
       AND nt.name        = ct.name
+      AND nt.is_new
   );
 
   v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 1);
@@ -67,16 +69,18 @@ BEGIN
     , di.name
     )
   , FALSE  -- permanently removed
-  FROM _migrations.dropped_indexes di
+  FROM _migrations.indexes_diff di
   JOIN _migrations.current_tables ct
     ON ct.oid = di.table_oid
   -- not already queued from the first insert
-  AND NOT EXISTS (
+  WHERE NOT EXISTS (
     SELECT 1
     FROM _migrations.migration_ddl md
     WHERE md.object_type   = 'INDEX'
       AND md.ddl_operation = 'DROP'
       AND md.object_name   = di.name
       AND md.schema_name   = ct.schema_name
-  );
+  )
+  AND di.operation_type = 'DROP_INDEX';
+
 END $FUNC$ LANGUAGE PLPGSQL;

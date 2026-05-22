@@ -1,7 +1,7 @@
 CREATE OR REPLACE PROCEDURE _migrations.generate_ddl()
 AS $FUNC$
 BEGIN
-  RAISE NOTICE 'Starting DDL generation...';
+  RAISE NOTICE '% - Starting DDL generation...', clock_timestamp();
   /*
     Phases planning
     1 - Preparation: drop views, FKs, indexes
@@ -28,7 +28,7 @@ BEGIN
       ('SCHEMA', 'TABLE', 'COLUMN', 'CONSTRAINT', 'VIEW', 'MATERIALIZED VIEW', 'INDEX', 'SEQUENCE')
     )
   , CONSTRAINT ddl_operation_ck CHECK(ddl_operation IN 
-      ('CREATE', 'DROP', 'ALTER')
+      ('CREATE', 'DROP', 'ALTER', 'RECREATE')
     )
   , CONSTRAINT status_ck CHECK (status IN 
       ('PENDING', 'DONE', 'ERROR', 'SKIPPED', 'DRY RUN')
@@ -37,23 +37,31 @@ BEGIN
   );
 
   -- Phase 1 — Preparation (drop dependent objects)
-  RAISE NOTICE 'Generating Phase 1 DDL (Views)...';
+  RAISE NOTICE '% - Generating Phase 1 DDL (Views)...', clock_timestamp();
   CALL _migrations.generate_ddl_phase1_views();
-  RAISE NOTICE 'Generating Phase 1 DDL (Constraints)...';
+  RAISE NOTICE '% - Generating Phase 1 DDL (Constraints)...', clock_timestamp();
   CALL _migrations.generate_ddl_phase1_constraints();
-  RAISE NOTICE 'Generating Phase 1 DDL (Indexes)...';
+  RAISE NOTICE '% - Generating Phase 1 DDL (Indexes)...', clock_timestamp();
   CALL _migrations.generate_ddl_phase1_indexes();
 
   -- Phase 2 — Alteration (structural changes)
-  RAISE NOTICE 'Generating Phase 2 DDL (Tables/Columns)...';
+  RAISE NOTICE '% - Generating Phase 2 DDL (Tables/Columns)...', clock_timestamp();
   CALL _migrations.generate_ddl_phase2_sequences();
   CALL _migrations.generate_ddl_phase2_tables();
-  CALL _migrations.generate_ddl_phase2_constraints();  -- new/dropped CHECK, UNIQUE
 
   -- Phase 3 — Finalization (rebuild dropped objects)
+  RAISE NOTICE '% - Generating Phase 3 DDL (Rebuild Indexes/Constraints/Views)...', clock_timestamp();
   CALL _migrations.generate_ddl_phase3_indexes();
   CALL _migrations.generate_ddl_phase3_constraints();  -- recreate PKs, FKs
   CALL _migrations.generate_ddl_phase3_views();        -- recreate managed views
 
-  RAISE NOTICE 'DDL generation complete.';
+  -- Phase 4 -- Alteration (non-structural changes)
+  RAISE NOTICE '% - Generating Phase 4 DDL (Uniques/PKs)...', clock_timestamp();
+  CALL _migrations.generate_ddl_phase4_uniques_and_pks();
+  RAISE NOTICE '% - Generating Phase 4 DDL (Constraints)...', clock_timestamp();
+  CALL _migrations.generate_ddl_phase4_constraints();  -- new/dropped CHECK, UNIQUE
+  RAISE NOTICE '% - Generating Phase 4 DDL (Indexes)...', clock_timestamp();
+  CALL _migrations.generate_ddl_phase4_indexes();  -- new/dropped CHECK, UNIQUE
+  
+  RAISE NOTICE '% - DDL generation complete.', clock_timestamp();
 END $FUNC$ LANGUAGE PLPGSQL;

@@ -3,7 +3,7 @@ AS $FUNC$
 DECLARE
   v_max_phase_seq INT := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 3);
 BEGIN
-  RAISE NOTICE 'Generating DDL for phase 3 (views)...';
+  RAISE NOTICE '% - Generating DDL for phase 3 (views)...', clock_timestamp();
 
   -- Recreate managed views from target definition
   -- ordered by depth ASC so base views are created before dependent ones
@@ -77,7 +77,7 @@ BEGIN
       THEN 'MATERIALIZED VIEW'
       ELSE 'VIEW'
     END
-  , 'CREATE'
+  , 'RECREATE'
   , tv.schema_name
   , tv.name
   , FORMAT(

@@ -3,7 +3,7 @@ AS $FUNC$
 DECLARE
   v_max_phase_seq INT := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 1);
 BEGIN
-  RAISE NOTICE 'Generating DDL for phase 1 (constraints)...';
+  RAISE NOTICE '% - Generating DDL for phase 1 (constraints)...', clock_timestamp();
 
   -- Drop FKs that are being permanently removed
   INSERT INTO _migrations.migration_ddl (
@@ -27,10 +27,13 @@ BEGIN
     , dc.name
     )
   , FALSE
-  FROM _migrations.dropped_constraints dc
+  FROM _migrations.constraints_diff dc
   JOIN _migrations.current_tables ct
-    ON ct.oid = dc.table_oid
-  WHERE dc.type = 'f';
+    ON ct.schema_name = dc.schema_name
+    AND ct.name = dc.table_name
+  WHERE dc.type = 'f'
+  AND dc.operation_type = 'DROP_CONSTRAINT'
+  ;
 
   v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 1);
   -- Drop FKs that reference tables with altered columns (temporary)
@@ -58,6 +61,7 @@ BEGIN
   FROM _migrations.current_constraints cc
   JOIN _migrations.current_tables ct
     ON ct.oid = cc.table_oid
+    AND ct.schema_name = cc.schema_name
   WHERE cc.type = 'f'
     AND cc.ref_table_oid IN (
       SELECT ct2.oid
@@ -101,10 +105,12 @@ BEGIN
   FROM _migrations.current_constraints cc
   JOIN _migrations.current_tables ct
     ON ct.oid = cc.table_oid
+    AND ct.schema_name = cc.schema_name
   JOIN _migrations.columns_diff cd
     ON cd.schema_name = ct.schema_name
     AND cd.table_name = ct.name
   WHERE cc.type = 'p'
+    AND cd.operation_type NOT IN ('ADD_COLUMN', 'DROP_COLUMN')
     AND NOT EXISTS (
       SELECT 1
       FROM _migrations.migration_ddl md
@@ -142,6 +148,7 @@ BEGIN
   FROM _migrations.current_constraints cc
   JOIN _migrations.current_tables ct
     ON ct.oid = cc.table_oid
+    AND ct.schema_name = cc.schema_name
   -- only constraints that are backed by an index
   JOIN _migrations.current_indexes ci
     ON ci.table_oid = cc.table_oid
@@ -154,6 +161,7 @@ BEGIN
     FROM _migrations.columns_diff cd
     WHERE cd.schema_name = ct.schema_name
       AND cd.table_name  = ct.name
+      AND cd.operation_type NOT IN ('ADD_COLUMN', 'DROP_COLUMN')
   )
   -- not already queued
   AND NOT EXISTS (
@@ -191,6 +199,7 @@ BEGIN
   FROM _migrations.current_constraints cc
   JOIN _migrations.current_tables ct
     ON ct.oid = cc.table_oid
+    AND ct.schema_name = cc.schema_name
   -- only constraints that are backed by an index
   JOIN _migrations.current_indexes ci
     ON ci.table_oid = cc.table_oid
@@ -202,6 +211,7 @@ BEGIN
     FROM _migrations.target_indexes ti
     JOIN _migrations.target_tables tt
       ON ti.table_oid = tt.oid
+      AND ti.schema_name = tt.schema_name
     WHERE ci.name = ti.name
     AND ct.schema_name = tt.schema_name
     AND ct.name = tt.name

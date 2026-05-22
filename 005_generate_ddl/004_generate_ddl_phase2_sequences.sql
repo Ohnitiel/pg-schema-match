@@ -6,7 +6,8 @@ BEGIN
   -- Create new schemas
   WITH new_schemas AS (
     SELECT DISTINCT schema_name
-    FROM _migrations.new_tables
+    FROM _migrations.tables_diff
+    WHERE is_new
   )
   INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
@@ -28,8 +29,8 @@ BEGIN
   FROM new_schemas;
 
   v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 2);
-  RAISE NOTICE 'Generating DDL for phase 2 (sequences)...';
-  -- Create new sequences
+  RAISE NOTICE '% - Generating DDL for phase 2 (sequences)...', clock_timestamp();
+  -- NEW SEQUENCES
   INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
   , schema_name, object_name
@@ -61,7 +62,7 @@ BEGIN
   WHERE sd.is_new;
 
   v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 2);
-  -- Alter changed sequence properties
+  -- CHANGED SEQUENCES
   INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
   , schema_name, object_name
@@ -90,4 +91,29 @@ BEGIN
   JOIN _migrations.target_sequences ts
     ON ts.oid = sd.oid
   WHERE sd.is_changed;
+
+  v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 2);
+  -- DROP SEQUENCES
+  INSERT INTO _migrations.migration_ddl (
+    phase, seq, object_type, ddl_operation
+  , schema_name, object_name
+  , ddl, is_temporary_drop
+  )
+  SELECT
+    2
+  , v_max_phase_seq 
+    + ROW_NUMBER() OVER (ORDER BY sd.schema_name, sd.name)
+  , 'SEQUENCE'
+  , 'DROP'
+  , sd.schema_name
+  , sd.name
+  , FORMAT(
+      'DROP SEQUENCE %I.%I;'
+    , sd.schema_name
+    , sd.name
+    )
+  , FALSE
+  FROM _migrations.sequences_diff sd
+  WHERE sd.operation_type = 'DROP_SEQUENCE';
+
 END $FUNC$ LANGUAGE PLPGSQL;

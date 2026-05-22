@@ -2,7 +2,7 @@ CREATE OR REPLACE PROCEDURE _migrations.generate_ddl_phase1_views()
 AS $FUNC$
 BEGIN
 
-  RAISE NOTICE 'Saving non managed views...';
+  RAISE NOTICE '% - Saving non managed views...', clock_timestamp();
   -- Saves non managed views that depend on altered or dropped tables
   INSERT INTO _migrations.tenant_views (
     oid, schema_name, name, expression, is_materialized, depends_on
@@ -58,15 +58,15 @@ BEGIN
   , c.relkind = 'm'
   , ARRAY_AGG(tn.nspname || '.' || tc.relname)
       OVER (PARTITION BY c.oid)
-  FROM _migrations.dropped_tables dt
+  FROM _migrations.tables_diff td
   JOIN pg_depend dep
-    ON dep.refobjid = dt.oid
+    ON dep.refobjid = td.oid
     AND dep.deptype = 'n'
   JOIN pg_rewrite rw
     ON rw.oid = dep.objid
   JOIN pg_class c
     ON c.oid = rw.ev_class
-    AND c.oid <> dt.oid
+    AND c.oid <> td.oid
   JOIN pg_namespace n
     ON n.oid = c.relnamespace
   JOIN pg_class tc
@@ -74,6 +74,7 @@ BEGIN
   JOIN pg_namespace tn
     ON tn.oid = tc.relnamespace
   WHERE c.relkind IN ('v', 'm')
+  AND td.operation_type = 'DROP_TABLE'
   -- only tenant views (not managed)
   AND NOT EXISTS (
     SELECT 1 FROM _migrations.target_views tv
@@ -86,7 +87,7 @@ BEGIN
     WHERE tv.oid = c.oid
   );
 
-  RAISE NOTICE 'Generating DDL for phase 1 (views)...';
+  RAISE NOTICE '% - Generating DDL for phase 1 (views)...', clock_timestamp();
   INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
   , schema_name, object_name
@@ -139,18 +140,19 @@ BEGIN
     , c.relname
     , c.relkind = 'm'
     , 1
-    FROM _migrations.dropped_tables dt
+    FROM _migrations.tables_diff td
     JOIN pg_depend dep
-      ON dep.refobjid = dt.oid
+      ON dep.refobjid = td.oid
       AND dep.deptype = 'n'
     JOIN pg_rewrite rw
       ON rw.oid = dep.objid
     JOIN pg_class c
       ON c.oid = rw.ev_class
-      AND c.oid <> dt.oid
+      AND c.oid <> td.oid
     JOIN pg_namespace n
       ON n.oid = c.relnamespace
     WHERE c.relkind IN ('v', 'm')
+    AND td.operation_type = 'DROP_TABLE'
   )
   SELECT
     1

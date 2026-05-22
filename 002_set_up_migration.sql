@@ -1,7 +1,7 @@
 CREATE OR REPLACE PROCEDURE _migrations.set_up_migration()
 AS $FUNC$
 BEGIN
-  RAISE NOTICE 'Setting up migration staging tables...';
+  RAISE NOTICE '% - Setting up migration staging tables...', clock_timestamp();
 
   CREATE TABLE IF NOT EXISTS _migrations.migration_phases (
     phase INT PRIMARY KEY
@@ -12,6 +12,7 @@ BEGIN
     (1, 'preparation', 'Drop dependent objects')
   , (2, 'alteration', 'Structural changes')
   , (3, 'finalization', 'Rebuild dependent objects')
+  , (4, 'alteration', 'Non-structural changes')
   ON CONFLICT (phase) DO NOTHING;
 
   CREATE TABLE IF NOT EXISTS _migrations.tenant_views (
@@ -41,11 +42,6 @@ BEGIN
   , schema_name TEXT NOT NULL
   , name TEXT NOT NULL
   , relkind CHAR NOT NULL
-  , strategy TEXT NOT NULL
-
-  , CONSTRAINT strategy_ck CHECK (strategy IN
-      ('SHADOW','AGGREGATE', 'DIRECT')
-    )
   );
 
   CREATE TABLE IF NOT EXISTS _migrations.target_columns (
@@ -79,6 +75,7 @@ BEGIN
   CREATE TABLE IF NOT EXISTS _migrations.target_constraints (
     oid OID PRIMARY KEY
   , name TEXT NOT NULL
+  , schema_name TEXT
   , type TEXT NOT NULL CHECK (type IN ('p','f','u','c','x'))
   , table_oid OID NOT NULL
   , ref_table_oid OID
@@ -95,6 +92,7 @@ BEGIN
   CREATE TABLE IF NOT EXISTS _migrations.current_constraints (
     oid OID PRIMARY KEY
   , name TEXT NOT NULL
+  , schema_name TEXT
   , type TEXT NOT NULL CHECK (type IN ('p','f','u','c','x'))
   , table_oid OID NOT NULL
   , ref_table_oid OID
@@ -110,6 +108,7 @@ BEGIN
 
   CREATE TABLE IF NOT EXISTS _migrations.target_indexes (
     oid OID PRIMARY KEY
+  , schema_name TEXT
   , table_oid OID NOT NULL
   , name TEXT NOT NULL
   , expression TEXT NOT NULL
@@ -119,6 +118,7 @@ BEGIN
 
   CREATE TABLE IF NOT EXISTS _migrations.current_indexes (
     oid OID PRIMARY KEY
+  , schema_name TEXT
   , table_oid OID NOT NULL
   , name TEXT NOT NULL
   , expression TEXT NOT NULL
@@ -166,5 +166,5 @@ BEGIN
   , is_materialized BOOL NOT NULL DEFAULT FALSE
   );
 
-  RAISE NOTICE 'Migration staging tables created successfully.';
+  RAISE NOTICE '% - Migration staging tables created successfully.', clock_timestamp();
 END $FUNC$ LANGUAGE PLPGSQL;
