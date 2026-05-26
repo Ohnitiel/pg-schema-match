@@ -27,4 +27,5 @@ SELECT
 , attacl
 , attoptions
 , attfdwoptions
+, pg_catalog.format_type(atttypid, atttypmod) AS full_type
 FROM pg_attribute;

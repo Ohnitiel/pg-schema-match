@@ -51,6 +51,7 @@ BEGIN
   , tc.length
   , tc.default
   , 'ADD_COLUMN' AS operation_type
+  , tc.full_type
   FROM _migrations.target_columns tc
   JOIN _migrations.target_tables tt
     ON tc.schema_name = tt.schema_name
@@ -76,6 +77,7 @@ BEGIN
   , cc.length
   , cc.default
   , 'DROP_COLUMN' AS operation_type
+  , cc.full_type
   FROM _migrations.current_columns cc
   JOIN _migrations.current_tables ct
     ON cc.table_oid = ct.oid
@@ -97,6 +99,7 @@ BEGIN
   , tc.length
   , tc.default
   , 'ALTER_TYPE' AS operation_type
+  , tc.full_type
   FROM _migrations.target_columns tc
   LEFT JOIN _migrations.current_columns cc
     ON tc.schema_name = cc.schema_name
@@ -108,10 +111,7 @@ BEGIN
     ON tc.schema_name = td.schema_name
     AND tc.table_name = td.name
   WHERE cc.table_oid IS NOT NULL
-    AND (
-      tc.type <> cc.type
-      OR COALESCE(tc.length, -1) <> COALESCE(cc.length, -1)
-    )
+    AND tc.full_type <> cc.full_type
 
   UNION ALL
 
@@ -125,6 +125,7 @@ BEGIN
   , tc.length
   , tc.default
   , 'SET_NOT_NULL' AS operation_type
+  , tc.full_type
   FROM _migrations.target_columns tc
   LEFT JOIN _migrations.current_columns cc
     ON tc.schema_name = cc.schema_name
@@ -149,6 +150,7 @@ BEGIN
   , tc.length
   , tc.default
   , 'DROP_NOT_NULL' AS operation_type
+  , tc.full_type
   FROM _migrations.target_columns tc
   LEFT JOIN _migrations.current_columns cc
     ON tc.schema_name = cc.schema_name
@@ -173,6 +175,7 @@ BEGIN
   , tc.length
   , tc.default
   , 'DROP_DEFAULT' AS operation_type
+  , tc.full_type
   FROM _migrations.target_columns tc
   LEFT JOIN _migrations.current_columns cc
     ON tc.schema_name = cc.schema_name
@@ -198,6 +201,7 @@ BEGIN
   , tc.length
   , tc.default
   , 'SET_DEFAULT' AS operation_type
+  , tc.full_type
   FROM _migrations.target_columns tc
   LEFT JOIN _migrations.current_columns cc
     ON tc.schema_name = cc.schema_name

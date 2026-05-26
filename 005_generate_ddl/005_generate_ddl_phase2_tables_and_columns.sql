@@ -51,21 +51,10 @@ BEGIN
     , STRING_AGG(
         FORMAT('ADD COLUMN IF NOT EXISTS %I %s%s%s'
         , tc.name
-        , CASE
-            WHEN tc.type ILIKE '%char%'
-              THEN FORMAT(
-                '%s%s'
-              , type
-              , CASE tc.length
-                  WHEN -1 THEN ''
-                  ELSE FORMAT('(%s)', tc.length)
-                END
-              )
-            ELSE tc.type
-          END
+        , full_type
         , CASE WHEN NOT tc.nullable THEN ' NOT NULL' ELSE '' END
         , CASE WHEN tc."default" IS NOT NULL
-            THEN ' DEFAULT ' || tc."default"
+            THEN ' DEFAULT NEXTVAL(''' || tc."default" || ''')'
             ELSE ''
           END
         )
@@ -126,23 +115,12 @@ BEGIN
           END
         , name
         , CASE operation_type
-            WHEN 'SET_DEFAULT' THEN FORMAT('SET DEFAULT %s', "default")
+            WHEN 'SET_DEFAULT' THEN FORMAT('SET DEFAULT NEXTVAL(''%s'')', "default")
             WHEN 'DROP_DEFAULT' THEN 'DROP DEFAULT'
             WHEN 'DROP_NOT_NULL' THEN 'DROP NOT NULL'
             WHEN 'ADD_COLUMN' THEN FORMAT(
               '%s%s%s'
-            , CASE
-                WHEN type ILIKE '%char%'
-                  THEN FORMAT(
-                    '%s%s'
-                  , type
-                  , CASE length
-                      WHEN -1 THEN ''
-                      ELSE FORMAT('(%s)', length)
-                    END
-                  )
-                ELSE type
-              END
+            , full_type
             , CASE 
                 WHEN operation_type = 'ADD_COLUMN' AND NOT nullable THEN ' NOT NULL '
                 WHEN operation_type = 'ADD_COLUMN' AND nullable THEN ''
@@ -151,7 +129,7 @@ BEGIN
                 ELSE ''
               END
             , CASE WHEN "default" IS NOT NULL
-                THEN FORMAT(' DEFAULT %s', "default")
+                THEN FORMAT(' DEFAULT NEXTVAL(''%s'')', "default")
                 ELSE ''
               END
             )
@@ -201,18 +179,7 @@ BEGIN
           FORMAT(
             'ALTER COLUMN %1$I TYPE %2$s USING %1$I::%2$s'
           , name
-          , CASE
-              WHEN type ILIKE '%char%'
-                THEN FORMAT(
-                  '%s%s'
-                , type
-                , CASE length
-                    WHEN -1 THEN ''
-                    ELSE FORMAT('(%s)', length)
-                  END
-                )
-              ELSE type
-            END
+          , full_type
           )
         , ', '
         )

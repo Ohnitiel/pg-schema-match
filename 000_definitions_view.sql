@@ -77,7 +77,7 @@ SELECT
     ad.adrelid,
     n.nspname,
     c.relname || '.' || a.attname,
-    pg_get_expr(ad.adbin, ad.adrelid)
+    pg_get_serial_sequence(n.nspname || '.' || c.relname, a.attname)
 FROM pg_attrdef ad
 JOIN pg_attribute a
   ON a.attrelid = ad.adrelid

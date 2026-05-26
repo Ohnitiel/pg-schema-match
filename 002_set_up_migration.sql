@@ -53,6 +53,7 @@ BEGIN
   , type TEXT NOT NULL
   , length INT4
   , "default" TEXT
+  , full_type TEXT
 
   , CONSTRAINT tc_pk PRIMARY KEY (table_oid, name)
   , CONSTRAINT tc_tt_fk FOREIGN KEY (table_oid) REFERENCES _migrations.target_tables(oid)
@@ -67,6 +68,7 @@ BEGIN
   , type TEXT NOT NULL
   , length INT4
   , "default" TEXT
+  , full_type TEXT
 
   , CONSTRAINT cc_pk PRIMARY KEY (table_oid, name)
   , CONSTRAINT cc_ct_fk FOREIGN KEY (table_oid) REFERENCES _migrations.current_tables(oid)

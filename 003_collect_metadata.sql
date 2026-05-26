@@ -16,11 +16,11 @@ BEGIN
   RAISE NOTICE '% - Collecting TARGET columns...', clock_timestamp();
   INSERT INTO _migrations.target_columns (
     table_oid, schema_name, table_name, name, nullable
-  , type, length, "default"
+  , type, length, "default", full_type
   )
   SELECT
     c.oid, n.nspname, c.relname, a.attname, NOT a.attnotnull
-  , t.typname, a.atttypmod, def.definition
+  , t.typname, a.atttypmod, def.definition, a.full_type
   FROM model_schema.pg_class c
   JOIN model_schema.pg_namespace n
     ON c.relnamespace = n.oid
@@ -109,11 +109,12 @@ BEGIN
   RAISE NOTICE '% - Collecting CURRENT columns...', clock_timestamp();
   INSERT INTO _migrations.current_columns (
     table_oid, schema_name, table_name, name, nullable
-  , type, length, "default"
+  , type, length, "default", full_type
   )
   SELECT 
     c.oid, n.nspname, c.relname, a.attname, NOT a.attnotnull
-  , t.typname, a.atttypmod, pg_get_expr(d.adbin, d.adrelid)
+  , t.typname, a.atttypmod, pg_get_serial_sequence(n.nspname || '.' || c.relname, a.attname)
+  , pg_catalog.format_type(a.atttypid, a.atttypmod)
   FROM pg_class c
   JOIN pg_namespace n ON c.relnamespace = n.oid
   JOIN pg_attribute a ON a.attrelid = c.oid
