@@ -4,7 +4,7 @@ Your dev schema got tons of changes and no documentation or migration scripts? T
 A postgresql only solution to schema drift.
 
 # Tools
-- [postgres-fdw] (https://www.postgresql.org/docs/current/postgres-fdw.html)
+- [postgres-fdw](https://www.postgresql.org/docs/current/postgres-fdw.html)
 
 # Usage
 First, install the postgres-fdw extension.
