@@ -20,7 +20,7 @@ process_files() {
     done;
 }
 
-ignored_files=("./000_definitions_view.sql" "./000_pg_attribute_view.sql" "./generate_all.sh" "./all.sql" "./GEMINI.md" "./err.log")
+ignored_files=("./000_definitions_view.sql" "./000_pg_attribute_view.sql" "./generate_all.sh" "./all.sql" "./GEMINI.md" "./err.log" "./README.md")
 files_to_append=()
 
 process_files

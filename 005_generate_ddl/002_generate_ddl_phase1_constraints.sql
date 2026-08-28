@@ -5,37 +5,6 @@ DECLARE
 BEGIN
   RAISE NOTICE '% - Generating DDL for phase 1 (constraints)...', clock_timestamp();
 
-  -- Drop FKs that are being permanently removed
-  INSERT INTO _migrations.migration_ddl (
-    phase, seq, object_type, ddl_operation
-  , schema_name, table_name, object_name
-  , ddl, is_temporary_drop
-  )
-  SELECT
-    1
-  , v_max_phase_seq 
-    + ROW_NUMBER() OVER (ORDER BY dc.name)
-  , 'CONSTRAINT'
-  , 'DROP'
-  , ct.schema_name
-  , ct.name
-  , dc.name
-  , FORMAT(
-      'ALTER TABLE %I.%I DROP CONSTRAINT IF EXISTS %I;'
-    , ct.schema_name
-    , ct.name
-    , dc.name
-    )
-  , FALSE
-  FROM _migrations.constraints_diff dc
-  JOIN _migrations.current_tables ct
-    ON ct.schema_name = dc.schema_name
-    AND ct.name = dc.table_name
-  WHERE dc.type = 'f'
-  AND dc.operation_type = 'DROP_CONSTRAINT'
-  ;
-
-  v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 1);
   -- Drop FKs that reference tables with altered columns (temporary)
   INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
@@ -110,7 +79,7 @@ BEGIN
     ON cd.schema_name = ct.schema_name
     AND cd.table_name = ct.name
   WHERE cc.type = 'p'
-    AND cd.operation_type NOT IN ('ADD_COLUMN', 'DROP_COLUMN')
+    AND cd.operation_type IN ('ALTER_TYPE', 'DROP_COLUMN')
     AND NOT EXISTS (
       SELECT 1
       FROM _migrations.migration_ddl md
@@ -161,7 +130,7 @@ BEGIN
     FROM _migrations.columns_diff cd
     WHERE cd.schema_name = ct.schema_name
       AND cd.table_name  = ct.name
-      AND cd.operation_type NOT IN ('ADD_COLUMN', 'DROP_COLUMN')
+      AND cd.operation_type IN ('ALTER_TYPE', 'DROP_COLUMN')
   )
   -- not already queued
   AND NOT EXISTS (
@@ -174,6 +143,7 @@ BEGIN
       AND md.table_name    = ct.name
   );
 
+  v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 1);
   -- Drop constraints backed by indexes that will be dropped
   INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation

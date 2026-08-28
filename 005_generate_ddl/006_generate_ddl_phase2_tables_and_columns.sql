@@ -54,7 +54,7 @@ BEGIN
         , full_type
         , CASE WHEN NOT tc.nullable THEN ' NOT NULL' ELSE '' END
         , CASE WHEN tc."default" IS NOT NULL
-            THEN ' DEFAULT NEXTVAL(''' || tc."default" || ''')'
+            THEN ' DEFAULT ' || tc."default"
             ELSE ''
           END
         )
@@ -115,7 +115,8 @@ BEGIN
           END
         , name
         , CASE operation_type
-            WHEN 'SET_DEFAULT' THEN FORMAT('SET DEFAULT NEXTVAL(''%s'')', "default")
+            WHEN 'SET_DEFAULT'
+              THEN FORMAT('SET DEFAULT %s', "default")
             WHEN 'DROP_DEFAULT' THEN 'DROP DEFAULT'
             WHEN 'DROP_NOT_NULL' THEN 'DROP NOT NULL'
             WHEN 'ADD_COLUMN' THEN FORMAT(
@@ -129,7 +130,7 @@ BEGIN
                 ELSE ''
               END
             , CASE WHEN "default" IS NOT NULL
-                THEN FORMAT(' DEFAULT NEXTVAL(''%s'')', "default")
+                THEN FORMAT(' DEFAULT %s', "default")
                 ELSE ''
               END
             )

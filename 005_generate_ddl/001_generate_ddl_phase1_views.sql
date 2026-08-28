@@ -34,6 +34,7 @@ BEGIN
   JOIN pg_namespace tn
     ON tn.oid = tc.relnamespace
   WHERE c.relkind IN ('v', 'm')
+  AND cd.operation_type IN ('ALTER_TYPE', 'DROP_COLUMN')
   -- only tenant views (not managed)
   AND NOT EXISTS (
     SELECT 1 FROM _migrations.target_views tv
@@ -130,6 +131,7 @@ BEGIN
     JOIN pg_namespace n
       ON n.oid = c.relnamespace
     WHERE c.relkind IN ('v', 'm')
+    AND cd.operation_type IN ('ALTER_TYPE', 'DROP_COLUMN')
 
     UNION
 

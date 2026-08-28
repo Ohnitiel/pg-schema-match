@@ -5,9 +5,14 @@ DECLARE
 BEGIN
   -- Create new schemas
   WITH new_schemas AS (
-    SELECT DISTINCT schema_name
-    FROM _migrations.tables_diff
-    WHERE is_new
+    SELECT schema_name
+    FROM _migrations.target_tables
+    UNION
+    SELECT schema_name
+    FROM _migrations.target_sequences
+    UNION
+    SELECT schema_name
+    FROM _migrations.target_views
   )
   INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
@@ -45,13 +50,21 @@ BEGIN
   , ts.schema_name
   , ts.name
   , FORMAT(
-      'CREATE SEQUENCE IF NOT EXISTS %I.%I AS %s START %s MINVALUE %s MAXVALUE %s INCREMENT %s%s;'
+      'CREATE SEQUENCE IF NOT EXISTS %I.%I AS %s START %s %s %s INCREMENT %s%s;'
     , ts.schema_name
     , ts.name
     , ts.type
     , ts.start
-    , ts.min
-    , COALESCE(ts.max::text, '9223372036854775807')  -- pg default bigint max
+    , CASE
+        WHEN ts.min IS NULL
+          THEN 'NO MINVALUE'
+        ELSE 'MINVALUE ' || ts.min::text
+      END
+    , CASE
+        WHEN ts.max IS NULL
+          THEN 'NO MAXVALUE'
+        ELSE 'MAXVALUE ' || ts.max::text
+      END
     , ts.increment
     , CASE WHEN ts.cycles THEN ' CYCLE' ELSE ' NO CYCLE' END
     )
@@ -77,12 +90,20 @@ BEGIN
   , ts.schema_name
   , ts.name
   , FORMAT(
-      'ALTER SEQUENCE %I.%I AS %s MINVALUE %s MAXVALUE %s INCREMENT %s%s;'
+      'ALTER SEQUENCE %I.%I AS %s %s %s INCREMENT %s%s;'
     , ts.schema_name
     , ts.name
     , ts.type
-    , ts.min
-    , COALESCE(ts.max::text, '9223372036854775807')
+    , CASE
+        WHEN ts.min IS NULL
+          THEN 'NO MINVALUE'
+        ELSE 'MINVALUE ' || ts.min::text
+      END
+    , CASE
+        WHEN ts.max IS NULL
+          THEN 'NO MAXVALUE'
+        ELSE 'MAXVALUE ' || ts.max::text
+      END
     , ts.increment
     , CASE WHEN ts.cycles THEN ' CYCLE' ELSE ' NO CYCLE' END
     )

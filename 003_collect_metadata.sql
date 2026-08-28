@@ -113,7 +113,7 @@ BEGIN
   )
   SELECT 
     c.oid, n.nspname, c.relname, a.attname, NOT a.attnotnull
-  , t.typname, a.atttypmod, pg_get_serial_sequence(n.nspname || '.' || c.relname, a.attname)
+  , t.typname, a.atttypmod, pg_get_expr(d.adbin, d.adrelid)
   , pg_catalog.format_type(a.atttypid, a.atttypmod)
   FROM pg_class c
   JOIN pg_namespace n ON c.relnamespace = n.oid

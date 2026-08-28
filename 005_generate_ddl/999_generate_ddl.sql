@@ -46,6 +46,7 @@ BEGIN
 
   -- Phase 2 — Alteration (structural changes)
   RAISE NOTICE '% - Generating Phase 2 DDL (Tables/Columns)...', clock_timestamp();
+  CALL _migrations.generate_ddl_phase2_constraints();
   CALL _migrations.generate_ddl_phase2_sequences();
   CALL _migrations.generate_ddl_phase2_tables();
 

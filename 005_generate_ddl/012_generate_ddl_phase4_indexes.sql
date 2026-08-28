@@ -13,23 +13,23 @@ BEGIN
   SELECT
     4
   , v_max_phase_seq
-    + ROW_NUMBER() OVER (ORDER BY ct.schema_name, ct.name, ti.name)
+    + ROW_NUMBER() OVER (ORDER BY ct.schema_name, ct.name, ci.name)
   , 'INDEX'
   , 'DROP'
   , ct.schema_name
   , ct.name
-  , ti.name
+  , ci.name
   , FORMAT(
     'DROP INDEX %I.%I;'
     , ct.schema_name
-    , ti.name
+    , ci.name
     )
   , FALSE
   FROM _migrations.indexes_diff id
-  JOIN _migrations.target_indexes ti
-    ON ti.oid = id.oid
-  JOIN _migrations.target_tables ct
-    ON ct.oid = ti.table_oid
+  JOIN _migrations.current_indexes ci
+    ON ci.oid = id.oid
+  JOIN _migrations.current_tables ct
+    ON ct.oid = ci.table_oid
   WHERE id.operation_type = 'DROP_INDEX';
 
   v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 4);

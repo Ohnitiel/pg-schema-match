@@ -36,6 +36,7 @@ BEGIN
     ON ct.schema_name = tt.schema_name
     AND ct.name = tt.name
   WHERE tt.oid IS NULL
+  AND ct.relkind = 'r'
   ;
 
   RAISE NOTICE '% - Identifying column differences...', clock_timestamp();
@@ -86,6 +87,11 @@ BEGIN
     AND cc.table_name = tc.table_name
     AND cc.name = tc.name
   WHERE tc.table_oid IS NULL
+  AND ct.oid NOT IN (
+    SELECT oid
+    FROM _migrations.tables_diff
+    WHERE operation_type = 'DROP_TABLE'
+  )
 
   UNION ALL
 
@@ -107,9 +113,6 @@ BEGIN
     AND tc.name = cc.name
   LEFT JOIN _migrations.current_tables ct
     ON cc.table_oid = ct.oid
-  LEFT JOIN _migrations.tables_diff td
-    ON tc.schema_name = td.schema_name
-    AND tc.table_name = td.name
   WHERE cc.table_oid IS NOT NULL
     AND tc.full_type <> cc.full_type
 
@@ -133,10 +136,9 @@ BEGIN
     AND tc.name = cc.name
   LEFT JOIN _migrations.current_tables ct
     ON cc.table_oid = ct.oid
-  LEFT JOIN _migrations.tables_diff td
-    ON tc.schema_name = td.schema_name
-    AND tc.table_name = td.name
-  WHERE tc.nullable <> cc.nullable AND cc.nullable AND cc.table_oid IS NOT NULL
+  WHERE tc.nullable <> cc.nullable
+    AND cc.nullable
+    AND cc.table_oid IS NOT NULL
 
   UNION ALL
 
@@ -158,10 +160,9 @@ BEGIN
     AND tc.name = cc.name
   LEFT JOIN _migrations.current_tables ct
     ON cc.table_oid = ct.oid
-  LEFT JOIN _migrations.tables_diff td
-    ON tc.schema_name = td.schema_name
-    AND tc.table_name = td.name
-  WHERE tc.nullable <> cc.nullable AND tc.nullable AND cc.table_oid IS NOT NULL
+  WHERE tc.nullable <> cc.nullable
+    AND tc.nullable
+    AND cc.table_oid IS NOT NULL
 
   UNION ALL
 
@@ -183,10 +184,7 @@ BEGIN
     AND tc.name = cc.name
   LEFT JOIN _migrations.current_tables ct
     ON cc.table_oid = ct.oid
-  LEFT JOIN _migrations.tables_diff td
-    ON tc.schema_name = td.schema_name
-    AND tc.table_name = td.name
-  WHERE COALESCE(tc.default, '') <> COALESCE(cc.default, '')
+  WHERE tc.default IS DISTINCT FROM cc.default
     AND tc.default IS NULL AND cc.table_oid IS NOT NULL
 
   UNION ALL
@@ -209,10 +207,7 @@ BEGIN
     AND tc.name = cc.name
   LEFT JOIN _migrations.current_tables ct
     ON cc.table_oid = ct.oid
-  LEFT JOIN _migrations.tables_diff td
-    ON tc.schema_name = td.schema_name
-    AND tc.table_name = td.name
-  WHERE COALESCE(tc.default, '') <> COALESCE(cc.default, '')
+  WHERE tc.default IS DISTINCT FROM cc.default
     AND tc.default IS NOT NULL AND cc.table_oid IS NOT NULL
   ;
 
@@ -232,9 +227,25 @@ BEGIN
   , cc.oid IS NOT NULL
       AND tc.expression <> cc.expression AS is_changed
   , CASE
-      WHEN cc.oid IS NULL THEN 'CREATE_CONSTRAINT'
-      WHEN tc.expression <> cc.expression THEN 'ALTER_CONSTRAINT'
+      WHEN
+        cc.oid IS NULL
+        AND cc_exp.oid IS NULL
+          THEN 'CREATE_CONSTRAINT'
+      WHEN
+        cc.oid IS NOT NULL
+        AND tc.expression <> cc.expression
+          THEN 'ALTER_CONSTRAINT'
+      WHEN
+        cc.oid IS NULL
+        AND cc_exp.oid IS NOT NULL
+          THEN 'RENAME_CONSTRAINT'
     END AS operation_type
+  , CASE
+      WHEN
+        cc.oid IS NULL
+        AND cc_exp.oid IS NOT NULL
+          THEN cc_exp.name
+    END AS old_constraint_name
   FROM _migrations.target_constraints tc
   JOIN _migrations.target_tables tt
     ON tc.table_oid = tt.oid
@@ -244,6 +255,10 @@ BEGIN
   LEFT JOIN _migrations.current_constraints cc
     ON ct.oid = cc.table_oid
     AND tc.name = cc.name
+  LEFT JOIN _migrations.current_constraints cc_exp
+    ON ct.oid = cc_exp.table_oid
+    AND tc.expression = cc_exp.expression
+    AND tc.name <> cc_exp.name
 
   UNION ALL
 
@@ -252,13 +267,14 @@ BEGIN
     cc.oid
   , cc.table_oid
   , ct.schema_name
-  , ct.name
+  , ct.name AS table_name
   , cc.name
   , cc.type
   , cc.expression
   , NULL AS is_new
   , NULL AS is_changed
   , 'DROP_CONSTRAINT' AS operation_type
+  , NULL AS old_constraint_name
   FROM _migrations.current_constraints cc
   JOIN _migrations.current_tables ct
     ON cc.table_oid = ct.oid
@@ -289,6 +305,7 @@ BEGIN
       WHEN ci.oid IS NULL THEN 'CREATE_INDEX'
       WHEN ti.expression <> ci.expression THEN 'ALTER_INDEX'
     END AS operation_type
+  , NULL AS old_constraint_name
   FROM _migrations.target_indexes ti
   JOIN _migrations.target_tables tt
     ON ti.table_oid = tt.oid
@@ -318,6 +335,7 @@ BEGIN
   , NULL AS is_new
   , NULL AS is_changed
   , 'DROP_INDEX' AS operation_type
+  , NULL AS old_constraint_name
   FROM _migrations.current_indexes ci
   JOIN _migrations.current_tables ct
     ON ci.table_oid = ct.oid

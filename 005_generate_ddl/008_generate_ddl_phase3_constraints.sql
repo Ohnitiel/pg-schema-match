@@ -40,7 +40,7 @@ BEGIN
     3
   , ROW_NUMBER() OVER (ORDER BY schema_name, table_name, constraint_name)
   , 'CONSTRAINT'
-  , 'CREATE'
+  , 'RECREATE'
   , schema_name
   , table_name
   , constraint_name
@@ -92,7 +92,7 @@ BEGIN
   , v_max_phase_seq 
     + ROW_NUMBER() OVER (ORDER BY schema_name, table_name, constraint_name)
   , 'CONSTRAINT'
-  , 'CREATE'
+  , 'RECREATE'
   , schema_name
   , table_name
   , constraint_name
@@ -105,6 +105,34 @@ BEGIN
     )
   , FALSE
   FROM eligible_uks ef;
+
+  -- Handle renaming constraints
+  INSERT INTO _migrations.migration_ddl (
+    phase, seq, object_type, ddl_operation
+  , schema_name, table_name, object_name
+  , ddl, is_temporary_drop
+  )
+  SELECT
+    3
+  , v_max_phase_seq 
+    + ROW_NUMBER() OVER (
+      ORDER BY cd.schema_name, cd.table_name, cd.name
+    )
+  , 'CONSTRAINT'
+  , 'ALTER'
+  , cd.schema_name
+  , cd.table_name
+  , cd.name
+  , FORMAT(
+      'ALTER TABLE %I.%I RENAME CONSTRAINT %I TO %I;'
+    , cd.schema_name
+    , cd.table_name
+    , cd.old_constraint_name
+    , cd.name
+    )
+  , FALSE
+  FROM _migrations.constraints_diff cd
+  WHERE cd.operation_type = 'RENAME_CONSTRAINT';
 
   v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 3);
   -- Recreate FKs that were temporarily dropped

@@ -38,7 +38,7 @@ BEGIN
     FROM pg_constraint pc
     WHERE pc.conindid = ci.oid
   )
-  AND cd.operation_type <> 'ADD_COLUMN'
+  AND cd.operation_type IN ('DROP_COLUMN', 'ALTER_TYPE')
   -- exclude indexes on new tables (nothing to drop)
   AND NOT EXISTS (
     SELECT 1
@@ -46,7 +46,8 @@ BEGIN
     WHERE nt.schema_name = ct.schema_name
       AND nt.name        = ct.name
       AND nt.is_new
-  );
+  )
+  ORDER BY ci.name, ct.schema_name;
 
   v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 1);
   -- Drop indexes being permanently removed
@@ -81,6 +82,14 @@ BEGIN
       AND md.object_name   = di.name
       AND md.schema_name   = ct.schema_name
   )
-  AND di.operation_type = 'DROP_INDEX';
+  AND di.operation_type = 'DROP_INDEX'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM _migrations.tables_diff td
+    WHERE td.operation_type = 'DROP_TABLE'
+    AND td.schema_name = ct.schema_name
+    AND td.name = ct.name
+  )
+  ;
 
 END $FUNC$ LANGUAGE PLPGSQL;

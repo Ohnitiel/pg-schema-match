@@ -13,7 +13,7 @@ BEGIN
   , ddl, is_temporary_drop
   )
   WITH RECURSIVE view_deps AS (
-    -- seed: views we dropped in phase 1
+    -- seed 1: views we dropped in phase 1
     SELECT
       tv.oid
     , tv.schema_name
@@ -29,6 +29,23 @@ BEGIN
     WHERE md.phase         = 1
       AND md.object_type  IN ('VIEW', 'MATERIALIZED VIEW')
       AND md.ddl_operation = 'DROP'
+
+    UNION
+
+    -- seed 2: news views from diff
+    SELECT
+      tv.oid
+    , tv.schema_name
+    , tv.name
+    , tv.is_materialized
+    , 1           AS depth
+    , ARRAY[tv.oid] AS path
+    , FALSE         AS cycle
+    FROM _migrations.views_diff vd
+    JOIN _migrations.target_views tv
+      ON tv.name        = vd.name
+      AND tv.schema_name = vd.schema_name
+    WHERE vd.is_new
 
     UNION ALL
 

@@ -1,11 +1,12 @@
-CREATE OR REPLACE PROCEDURE _migrations.generate_ddl_phase4_uniques_and_pks()
+CREATE OR REPLACE PROCEDURE _migrations.generate_ddl_phase4_constraints()
 AS $FUNC$
 DECLARE
   v_max_phase_seq INT := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 4);
 BEGIN
   RAISE NOTICE '% - Generating DDL for phase 4 (constraints)...', clock_timestamp();
 
-  -- NEW PKS
+  v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 4);
+  -- NEW CONSTRAINTS OF OTHER TYPES
   INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
   , schema_name, table_name, object_name
@@ -34,11 +35,11 @@ BEGIN
   JOIN _migrations.target_tables ct
     ON ct.oid = tc.table_oid
   WHERE cd.is_new
-  AND cd.type = 'p'
+  AND cd.type NOT IN ('p', 'u')
   ;
 
   v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 4);
-  -- NEW UNIQUE CONSTRAINTS
+  -- DROP CONSTRAINTS
   INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
   , schema_name, table_name, object_name
@@ -47,31 +48,35 @@ BEGIN
   SELECT
     4
   , v_max_phase_seq 
-    + ROW_NUMBER() OVER (ORDER BY ct.schema_name, ct.name, tc.name)
+    + ROW_NUMBER() OVER (ORDER BY ct.schema_name, ct.name, dc.name)
   , 'CONSTRAINT'
-  , 'CREATE'
+  , 'DROP'
   , ct.schema_name
   , ct.name
-  , tc.name
+  , dc.name
   , FORMAT(
-      'ALTER TABLE %I.%I ADD CONSTRAINT %I %s;'
+      'ALTER TABLE %I.%I DROP CONSTRAINT IF EXISTS %I;'
     , ct.schema_name
     , ct.name
-    , tc.name
-    , tc.expression
+    , dc.name
     )
   , FALSE
-  FROM _migrations.constraints_diff cd
-  JOIN _migrations.target_constraints tc
-    ON tc.oid = cd.oid
-  JOIN _migrations.target_tables ct
-    ON ct.oid = tc.table_oid
-  WHERE cd.is_new
-  AND cd.type = 'u'
+  FROM _migrations.constraints_diff dc
+  JOIN _migrations.current_tables ct
+    ON ct.schema_name = dc.schema_name
+    AND ct.name = dc.table_name
+  WHERE dc.operation_type = 'DROP_CONSTRAINT'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM _migrations.tables_diff td
+    WHERE td.operation_type = 'DROP_TABLE'
+    AND td.schema_name = ct.schema_name
+    AND td.name = ct.name
+  )
   ;
 
   v_max_phase_seq := (SELECT COALESCE(MAX(seq), 0) FROM _migrations.migration_ddl WHERE phase = 4);
-  -- NEW INDEXES
+  -- CHANGED CONSTRAINTS
   INSERT INTO _migrations.migration_ddl (
     phase, seq, object_type, ddl_operation
   , schema_name, table_name, object_name
@@ -80,29 +85,24 @@ BEGIN
   SELECT
     4
   , v_max_phase_seq 
-    + ROW_NUMBER() OVER (ORDER BY ct.schema_name, ct.name, ti.name)
-  , 'INDEX'
-  , 'CREATE'
+    + ROW_NUMBER() OVER (ORDER BY ct.schema_name, ct.name, cc.name)
+  , 'CONSTRAINT'
+  , 'ALTER'
   , ct.schema_name
   , ct.name
-  , ti.name
+  , cc.name
   , FORMAT(
-      '%s;'  -- Index expression is the full syntax (CREATE INDEX...)
-    , ti.expression
+      'ALTER TABLE %I.%I DROP CONSTRAINT %I, ADD CONSTRAINT %I %s;'
+    , ct.schema_name
+    , ct.name
+    , cc.name
+    , cc.name
+    , cc.expression
     )
   , FALSE
-  FROM _migrations.indexes_diff id
-  JOIN _migrations.target_indexes ti
-    ON ti.oid = id.oid
-  JOIN _migrations.target_tables ct
-    ON ct.oid = ti.table_oid
-  WHERE id.is_new
-  AND id.name NOT IN (
-    SELECT name
-    FROM _migrations.constraints_diff
-    WHERE type IN ('p', 'u')
-    AND is_new
-  );
-
+  FROM _migrations.constraints_diff cc
+  JOIN _migrations.current_tables ct
+    ON ct.schema_name = cc.schema_name
+    AND ct.name = cc.table_name
+  WHERE cc.operation_type = 'ALTER_CONSTRAINT';
 END $FUNC$ LANGUAGE PLPGSQL;
-
